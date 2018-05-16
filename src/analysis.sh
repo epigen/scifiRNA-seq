@@ -33,7 +33,7 @@ done < $SAMPLE_ANNOTATION
 
 # Pipeline
 ## Step 0: FASTQC & Flagstat
-for ((I=0;I<${#SAMPLE_NAMES[@]};++i)); do
+for ((I=0; I<${#SAMPLE_NAMES[@]}; I++)); do
     mkdir -p data/${SAMPLE_NAMES[$I]}
     sambamba flagstat -t $CPUS ${BAM_FILES[$I]} > data/${SAMPLE_NAMES[$I]}/${SAMPLE_NAMES[$I]}.flagstat
     fastqc -t $CPUS -o data/${SAMPLE_NAMES[$I]} --no-extract ${BAM_FILES[$I]}
@@ -41,7 +41,7 @@ done
 
 
 ## Step 1: Trim reads, align, quantify transcripts
-for ((I=0;I<${#SAMPLE_NAMES[@]};++i)); do
+for ((I=0; I<${#SAMPLE_NAMES[@]}; I++)); do
     mkdir -p data/${SAMPLE_NAMES[$I]}
     mkdir -p data/${SAMPLE_NAMES[$I]}/raw
     mkdir -p data/${SAMPLE_NAMES[$I]}/mapped
@@ -60,8 +60,8 @@ for ((I=0;I<${#SAMPLE_NAMES[@]};++i)); do
     data/${SAMPLE_NAMES[$I]}/raw/${SAMPLE_NAMES[$I]}.r2.trimmed.fastq \
     ILLUMINACLIP:/home/arendeiro/resources/adapters/illumina.fa:2:30:10 \
     LEADING:10 TRAILING:10 \
-    SLIDINGWINDOW:4:15 MINLEN:32
-    # CROP:50 \ # <- for comparisons with Quant-seq
+    SLIDINGWINDOW:4:15 MINLEN:32 \
+    CROP:50 # <- for comparisons with Quant-seq
 
     # align
     srun --mem $MEM -p develop /cm/shared/apps/star/2.5.2b/STAR \
@@ -87,7 +87,7 @@ done
 # # Plot transcript coverage
 # gtfToGenePred ~/projects/archive/crop-seq/spiked_genomes/hg38_spiked_Tcrlibrary/Homo_sapiens.GRCh38.77.spiked.gtf q
 # awk '{print $2,$4,$5,$1,$8,$3}' q | sed 's/ /\t/g' | sortBed > ~/projects/archive/crop-seq/spiked_genomes/hg38_spiked_Tcrlibrary/Homo_sapiens.GRCh38.77.spiked.bed
-for ((I=0;I<${#SAMPLE_NAMES[@]};++i)); do
+for ((I=0; I<${#SAMPLE_NAMES[@]}; I++)); do
     echo ${SAMPLE_NAMES[$I]}
     geneBody_coverage.py \
     -r ~/hg38_RefSeq_curated.ensembl_chroms.bed \
@@ -106,14 +106,14 @@ df = pd.read_csv(os.path.join("metadata", "annotation.csv"))
 
 quant = pd.DataFrame()
 for sample in df['sample_name']:
-    
     quant[sample] = pd.read_csv(os.path.join(
             "data", sample, sample + ".r2.trimmed.starAligned.out.sorted.quant.tsv"),
         sep="\t", squeeze=True, index_col=0, header=None)
-quant = quant.loc[~quant.index.str.startswith("__")]
+quant.index.name = "gene"
 quant.to_csv(os.path.join("results", "quantification.raw_counts.csv"), index=True)
 
 # normalize
+quant = quant.loc[~quant.index.str.startswith("__")]
 quant = np.log2(1 + quant)
 quant = (quant / quant.sum(axis=0)) * 1e5
 quant.to_csv(os.path.join("results", "quantification.log2_rpm.csv"), index=True)
@@ -147,3 +147,28 @@ axis[2].set_xlabel(quant.columns[1])
 axis[2].set_ylabel(quant.columns[2])
 sns.despine(fig)
 fig.savefig(os.path.join("results", "sample_correlation.scatter.no_xy.svg"), bbox_inches="tight", dpi=300)
+
+
+
+# Align to lambda DNA
+SAMPLE_NAME=sci-RNA-seq_SCI004_Jurkat_100_lambda_1
+mkdir -p data/${SAMPLE_NAME}/mapped_lambda
+
+# align to lambda spiked genome
+srun --mem $MEM -p develop /cm/shared/apps/star/2.5.2b/STAR \
+--outSAMtype BAM Unsorted \
+--runThreadN $CPUS \
+--genomeDir ~/resources/genomes/hg38_spiked_lambda/ \
+--readFilesIn data/${SAMPLE_NAME}/raw/${SAMPLE_NAME}.r2.trimmed.fastq \
+--outFileNamePrefix data/${SAMPLE_NAME}/mapped_lambda/${SAMPLE_NAME}.r2.trimmed.star \
+--outReadsUnmapped data/${SAMPLE_NAME}/mapped_lambda/${SAMPLE_NAME}.r2.trimmed.star.unmapped
+
+# sort, index BAM file
+sambamba sort -t $CPUS data/${SAMPLE_NAME}/mapped_lambda/${SAMPLE_NAME}.r2.trimmed.starAligned.out.bam
+
+# quantify lambda DNA
+LAMBDA=`sambamba view -c -t $CPUS -F "ref_name=='lambda_chrom'" data/${SAMPLE_NAME}/mapped_lambda/${SAMPLE_NAME}.r2.trimmed.starAligned.out.bam`
+TOTAL=`sambamba view -c -t $CPUS -F "not unmapped" data/${SAMPLE_NAME}/mapped_lambda/${SAMPLE_NAME}.r2.trimmed.starAligned.out.bam`
+
+calc(){ awk "BEGIN { print "$*" }"; }
+echo `calc $LAMBDA/$TOTAL`
