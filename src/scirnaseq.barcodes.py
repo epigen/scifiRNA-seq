@@ -29,9 +29,7 @@ def main():
         prog="python scirnaseq.barcodes.py",
         description="\n".join([
             "sciRNA-seq script from Bock lab. " +
-            "See https://github.com/epigen/open_pipelines and " +
-            "https://github.com/epigen/open_pipelines/blob/master/" +
-            "pipelines/sciRNAseq.barcodes.md for specific documentation. "])
+            "See https://github.com/epigen/sciRNA-seq for specific documentation."])
     )
     parser = arg_parser(parser)
     # args = parser.parse_args("-a metadata/sciRNA-seq.oligos_2018-05-22v2.csv --mode slim samples_merged.bam".split(" "))
