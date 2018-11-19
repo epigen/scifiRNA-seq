@@ -1,8 +1,8 @@
 .DEFAULT_GOAL := run
 
 run:
-	sh src/process_barcodes.sh
-	python -u src/inspect_barcodes.py
+	sh src/main_pipeline.sh  # this actualy should be run manually
+	python -u src/plot_performance.SCI012-13.py
 
 all: run
 

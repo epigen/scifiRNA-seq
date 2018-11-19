@@ -26,7 +26,7 @@ df = df[df['experimental_batch'].isin(["SCI012", "SCI013"])]
 cell_barcodes = ['round1', 'round2']
 mismatches = 0
 
-annot_12 = pd.read_csv(os.path.join("metadata", "/scratch/lab_bock/shared/projects/sci-rna/metadata/sciRNA-seq.SCI012.oligos_2018-11-14.csv"))
+annot_12 = pd.read_csv(os.path.join("metadata", "sciRNA-seq.SCI012.oligos_2018-11-14.csv"))
 annot_12['plate_half'] = annot_12['plate_well'].str.contains("E|F|G|H").astype(int)
 annot_12.loc[annot_12['plate_well'].str.contains("A|B"), 'plate_quarter'] = 0
 annot_12.loc[annot_12['plate_well'].str.contains("C|D"), 'plate_quarter'] = 1
@@ -46,7 +46,7 @@ annot_12['plate_octo'] = annot_12['plate_octo'].astype(int)
 annot_12_1 = annot_12.loc[annot_12['barcode_type'] == "round1", ['barcode_sequence', 'plate_well', 'plate_half', 'plate_quarter', 'plate_octo']]
 annot_12_1 = annot_12_1.rename(columns={"barcode_sequence": 'round1', "plate_well": "round1_well"})
 
-annot_13 = pd.read_csv(os.path.join("metadata", "/scratch/lab_bock/shared/projects/sci-rna/metadata/sciRNA-seq.SCI013.oligos_2018-11-14.csv"))
+annot_13 = pd.read_csv(os.path.join("metadata", "sciRNA-seq.SCI013.oligos_2018-11-14.csv"))
 annot_13['plate_half'] = annot_13['plate_well'].str.contains("E|F|G|H").astype(int)
 annot_13.loc[annot_13['plate_well'].str.contains("A|B"), 'plate_quarter'] = 0
 annot_13.loc[annot_13['plate_well'].str.contains("C|D"), 'plate_quarter'] = 1
@@ -227,7 +227,8 @@ for ax in axis:
 sns.despine(fig)
 fig.savefig(os.path.join("results", "SCI012-13.comparisons.Cas9_per_cell.svg"), dpi=300, bbox_inches="tight", tight_layout=True)
 
- # # Barcode representation
+
+# # Barcode representation
 
 # ## molecule level
 # for barcode in ['round1', 'round2']:

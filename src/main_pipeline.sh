@@ -178,7 +178,7 @@ echo $I $START $END $MISMATCHES
 sbatch -J ${RUN_NAME}.barcode_extract.part_${I}.${START}_${END}.mis${MISMATCHES} \
 -o ${ROOT_OUTPUT_DIR}/logs/${RUN_NAME}.barcode_extract.part_${I}.${START}_${END}.mis${MISMATCHES}.log \
 -c 1 --mem 20000 -p shortq --time 1:00:00 \
---wrap "python -u ~/scirnaseq.barcodes.new.py \
+--wrap "python -u ${ROOT_OUTPUT_DIR}/src/scirnaseq.extract_barcodes.py \
 --mode slim --max-mismatches $MISMATCHES \
 --start ${START} --end ${END} \
 -a ${BARCODE_ANNOTATION} \
@@ -199,7 +199,7 @@ echo $RUN_NAME $((MISMATCHES-1)) $MISMATCHES
 sbatch -J ${RUN_NAME}.inspect_barcodes.mis${MISMATCHES} \
 -o ${ROOT_OUTPUT_DIR}/logs/${RUN_NAME}.inspect_barcodes.mis${MISMATCHES}.log \
 -c 1 --mem 80000 -p shortq --time 1:00:00 \
---wrap "python -u ~/inspect_barcodes.new.py \
+--wrap "python -u ${ROOT_OUTPUT_DIR}/src/scirnaseq.inspect_barcodes.py \
 --min-mismatches $((MISMATCHES-1)) --max-mismatches $MISMATCHES \
 --barcodes round1,round2 \
 --annotation ${BARCODE_ANNOTATION} \
