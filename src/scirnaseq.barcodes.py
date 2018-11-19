@@ -32,7 +32,10 @@ def main():
             "See https://github.com/epigen/sciRNA-seq for specific documentation."])
     )
     parser = arg_parser(parser)
-    # args = parser.parse_args("-a metadata/sciRNA-seq.oligos_2018-05-22v2.csv --mode slim samples_merged.bam".split(" "))
+    # args = parser.parse_args(
+    #    ("-a metadata/sciRNA-seq.oligos_2018-09-17.csv " +
+    #    "--mode slim "
+    #    "/scratch/lab_bsf/samples/BSF_0513_XXXXXXXXX/BSF_0513_XXXXXXXXX_4_samples/BSF_0513_XXXXXXXXX_4#SCI_011_3_gate_more_S43637.bam").split(" "))
     args = parser.parse_args()
     print("# " + time.asctime() + " - Start.")
     print(args)
@@ -45,7 +48,7 @@ def main():
         annotation)
 
     # Slim down output if required
-    cell_barcodes = ["round1", "round2", "round3a", "round3b"]
+    cell_barcodes = ["round1", "round2"]
     if args.mode == "slim":
         # remove Ns
         cells = cells.loc[~(cells.loc[:, cells.columns[cells.columns.str.contains('_contains_N')]] == 1).any(axis=1), :]
@@ -146,29 +149,10 @@ def arg_parser(parser):
     return parser
 
 
-def extract_barcodes(input_file, start=0, end=1e100):
+def extract_barcodes(
+        input_file, start=0, end=1e100):
     """
     """
-    def reverse_complement(seq):
-        """Reverse complement a DNA sequence.
-        From https://stackoverflow.com/questions/25188968/reverse-complement-of-dna-strand-using-python
-
-        :param seq: String to reverse complement.
-        :type seq: str
-        :returns: String reverse complemented.
-        :rtype: str
-        """
-        alt_map = {'ins': '0'}
-        complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A'} 
-        for k,v in alt_map.items():
-            seq = seq.replace(k,v)
-        bases = list(seq) 
-        bases = reversed([complement.get(base,base) for base in bases])
-        bases = ''.join(bases)
-        for k,v in alt_map.items():
-            bases = bases.replace(v,k)
-        return bases
-
     from collections import Counter
     input_handle = pysam.AlignmentFile(input_file, mode="rb", check_sq=False)
 
@@ -184,45 +168,52 @@ def extract_barcodes(input_file, start=0, end=1e100):
         if (end < (i - 1)):
             break
 
-        if (not read.is_paired) or read.is_read2:
-            continue
         if (i - 1) % 1000000 == 0:
             print(i)
-        umi = round1 = round2 = round3a = round3b = np.nan
+        umi = round1 = round2 = np.nan
 
-        if len(read.seq) != 19:
-            errors["read1_not_19bp"] += 1
-        else:
-            umi = read.seq[:8]
-            round1 = read.seq[8:]
-
-            # if round1 not in annoatation, set to nan
-        if read.has_tag("BC"):
-            read1 = dict(read.tags)["BC"]
-            if len(read1) != 24:
-                errors["readi7i5_not_24bp"] += 1
+        # round 1
+        if read.has_tag("r1"):
+            seq1 = read.get_tag("r1")
+            if len(seq1) != 11:
+                errors["round1_not_11bp"] += 1
             else:
-                read1_rc = reverse_complement(read1)
-                round2 = read1_rc[16:]
-                round3a = read1_rc[8:16]
-                round3b = read1_rc[:8]
+                round1 = seq1
         else:
-            errors["read1_not_BC_tag"] += 1
+            errors["no_round1_tag"] += 1
+        # round 2
+        if read.has_tag("r2"):
+            seq2 = read.get_tag("r2")
+            if len(seq2) != 11:
+                errors["round2_not_11bp"] += 1
+            else:
+                round2 = seq2
+        else:
+            errors["no_round2_tag"] += 1
+        # umi
+        if read.has_tag("RX"):
+            seq3 = read.get_tag("RX")
+            if len(seq3) != 8:
+                errors["umi_not_8bp"] += 1
+            else:
+                umi = seq3
+        else:
+            errors["no_umi_tag"] += 1
 
-        cells.append([read.qname, round1, round2, round3a, round3b, umi])
-        # cells.append([round1, round2, round3a, round3b, umi])
+        cells.append([read.qname, round1, round2, umi])
+        # cells.append([round1, round2, umi])
 
     print("# " + time.asctime() + " - Done extracting barcodes.")
     print("## Errors:")
     print(errors)
-    return pd.DataFrame(data=cells, columns=["read", "round1", "round2", "round3a", "round3b", "umi"])
+    return pd.DataFrame(data=cells, columns=["read", "round1", "round2", "umi"])
 
 
 def annotate_barcodes(cells, annotation):
     def count_mismatches(a, b):
         return sum(a != b for a, b in zip(a, b))
 
-    cell_barcodes = ["round1", "round2", "round3a", "round3b"]
+    cell_barcodes = ["round1", "round2"]
     # fraction mapping to annotation
     print("# " + time.asctime() + " - Starting to annotate barcodes.")
     print("## Matching to annotation.")
