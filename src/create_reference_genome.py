@@ -1,14 +1,15 @@
 #!/usr/bin/env python
 
-from looper.models import Project
 import os
-import pandas as pd
 
 
 def write_lambda(
-    output_fasta, output_gtf,
-    seq_url="https://www.neb.com/-/media/nebus/page-images/tools-and-resources/interactive-tools/dna-sequences-and-maps/text-documents/lambdafsa.txt?la=en",
-    seq_name="lambda"): 
+        output_fasta, output_gtf,
+        seq_url=None,
+        seq_name="lambda"):
+
+    if seq_url is None:
+        seq_url = "https://www.neb.com/-/media/nebus/page-images/tools-and-resources/interactive-tools/dna-sequences-and-maps/text-documents/lambdafsa.txt?la=en"
     fasta_header_template = ">{chrom}_chrom dna:chromosome chromosome:GRCh38:{chrom}_chrom:1:{length}:1 REF"
 
     gtf_template = """{chrom}_chrom\thavana\tgene\t1\t{length}\t.\t+\t.\tgene_id "{id}_gene"; gene_name "{id}_gene"; gene_source "ensembl_havana"; gene_biotype "lincRNA";
@@ -62,12 +63,20 @@ os.system(
 os.system("gzip -d {}".format(os.path.join(spiked_dir, "Homo_sapiens.GRCh38.77.gtf.gz")))
 
 # Add extra chromosomes (constructs) to genome
-os.system(
+cmd = (
     "cat {} {} > {}"
-    .format(os.path.join(spiked_dir, "Homo_sapiens.GRCh38.dna.primary_assembly.fa"), output_fasta, os.path.join(spiked_dir, "Homo_sapiens.GRCh38.dna.primary_assembly.spiked.fa")))
-os.system(
+    .format(
+        os.path.join(spiked_dir, "Homo_sapiens.GRCh38.dna.primary_assembly.fa"),
+        output_fasta,
+        os.path.join(spiked_dir, "Homo_sapiens.GRCh38.dna.primary_assembly.spiked.fa")))
+os.system(cmd)
+cmd = (
     "cat {} {} > {}"
-    .format(os.path.join(spiked_dir, "Homo_sapiens.GRCh38.77.gtf"), output_gtf, os.path.join(spiked_dir, "Homo_sapiens.GRCh38.77.spiked.gtf")))
+    .format(
+        os.path.join(spiked_dir, "Homo_sapiens.GRCh38.77.gtf"),
+        output_gtf,
+        os.path.join(spiked_dir, "Homo_sapiens.GRCh38.77.spiked.gtf")))
+os.system(cmd)
 
 # Build STAR index (contruct + spiked with gRNAs)
 cmd = "srun --mem 80000 -p develop /cm/shared/apps/star/2.4.2a/STAR"
@@ -84,7 +93,7 @@ cmd = "srun --mem 80000 -p develop java -Xmx8g -jar /cm/shared/apps/picard-tools
 cmd += " CreateSequenceDictionary"
 cmd += " REFERENCE={}".format(os.path.join(spiked_dir, "Homo_sapiens.GRCh38.dna.primary_assembly.spiked.fa"))
 cmd += " OUTPUT={}".format(os.path.join(spiked_dir, "Homo_sapiens.GRCh38.dna.primary_assembly.spiked.dict"))
-cmd += " GENOME_ASSEMBLY={}".format(genome)
+cmd += " GENOME_ASSEMBLY={}".format(genome_ref)
 cmd += " SPECIES=human"
 os.system(cmd)
 
