@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 
 """
-sciRNA-seq barcode parsing script.
+sciRNA-seq barcode extraction and correction script.
 """
 
-import os
 import sys
 from argparse import ArgumentParser
 import numpy as np
@@ -22,7 +21,6 @@ __email__ = "arendeiro@cemm.oeaw.ac.at"
 __status__ = "Development"
 
 
-
 def main():
     # Parse command-line arguments
     parser = ArgumentParser(
@@ -37,6 +35,21 @@ def main():
     #    "--mode slim "
     #    "/scratch/lab_bsf/samples/BSF_0513_XXXXXXXXX/BSF_0513_XXXXXXXXX_4_samples/BSF_0513_XXXXXXXXX_4#SCI_011_3_gate_more_S43637.bam").split(" "))
     args = parser.parse_args()
+
+    args.barcodes = args.barcodes.split(",")
+    args.barcode_tags = args.barcode_tags.split(",")
+    args.barcode_lengths = args.barcode_lengths.split(",")
+    args.barcode_lengths = [int(x) for x in args.barcode_lengths]
+    args.correct_barcodes = args.correct_barcodes.split(",")
+    msg = "Barcode tags ({}) and lengths ({}) are not of the same number as the number of barcodes to extract ({})!".format(
+        ", ".join(args.barcode_tags), ", ".join([str(x) for x in args.barcode_lengths]), ", ".join(args.barcodes)
+    )
+    assert len(args.barcodes) == len(args.barcode_tags) == len(args.barcode_lengths), msg
+    msg = "Barcodes to correct ({}) are not among barcodes to extract ({})!".format(
+        ", ".join(args.correct_barcodes), ", ".join(args.barcodes)
+    )
+    assert all([x in args.barcodes for x in args.correct_barcodes]), msg
+
     print("# " + time.asctime() + " - Start.")
     print(args)
 
@@ -44,17 +57,24 @@ def main():
 
     # Get barcodes and annotate with mismatches
     cells = annotate_barcodes(
-        extract_barcodes(args.input_file, start=args.start, end=args.end),
-        annotation)
+        extract_barcodes(
+            args.input_file,
+            barcodes=args.barcodes,
+            barcode_tags=args.barcode_tags,
+            barcode_lengths=args.barcode_lengths,
+            start=args.start, end=args.end),
+        annotation,
+        barcodes=args.correct_barcodes)
 
     # Slim down output if required
-    cell_barcodes = ["round1", "round2"]
     if args.mode == "slim":
         # remove Ns
-        cells = cells.loc[~(cells.loc[:, cells.columns[cells.columns.str.contains('_contains_N')]] == 1).any(axis=1), :]
+        cells = cells.loc[
+            ~(cells.loc[:, cells.columns[cells.columns.str.contains('_contains_N')]] == 1)
+            .any(axis=1), :]
 
         if args.max_mismatches > 0:
-            for barcode in cell_barcodes:
+            for barcode in args.correct_barcodes:
                 f = (
                     (cells[barcode + "_mismatches"] > 0) &
                     (cells[barcode + "_closest"] != "X") &
@@ -64,13 +84,17 @@ def main():
 
         # remove not matching any barcode with required mismatch threshold
         cells = cells.loc[
-            ~(cells.loc[:, cells.columns[cells.columns.str.contains('_mismatches')]] > args.max_mismatches).any(axis=1), :]
+            ~(cells.loc[
+                :,
+                cells.columns[cells.columns.str.contains('_mismatches')]] > args.max_mismatches)
+            .any(axis=1), :]
         # remove unused column
         cells = cells.drop(cells.columns[cells.columns.str.contains('_')], axis=1)
 
     # Save
-    o = ['read'] + cell_barcodes + ['umi']
+    o = ['read'] + args.barcodes
     o += [x for x in cells.columns if x not in o]
+    print("# Saving to file: " + args.output_file)
     cells[o].sort_values("read").to_csv(args.output_file, index=False, compression="gzip")
     print("# " + time.asctime() + " - Done.")
 
@@ -95,15 +119,32 @@ def arg_parser(parser):
         help="Output file with barcodes. Default is '{}'.".format(default),
         default=default,
         type=str)
-    choices = ["dark", "light"]
+    default = ['round1', 'round2', 'umi']
     parser.add_argument(
-        "-m", "--method",
-        dest="method",
-        default=choices[0],
-        choices=choices,
-        help="sciRNA-seq method of the sample. " +
-             "One of ['{}']. Default is '{}'.".format(
-                "', '".join(choices), choices[0]),
+        "-b", "--barcodes",
+        dest="barcodes",
+        help="Existing barcodes in the experiment. " +
+             "Comma-separated list of barcodes. " +
+             "Default is '{}'".format(",".join(default)),
+        default=",".join(default),
+        type=str)
+    default = ['r1', 'r2', 'RX']
+    parser.add_argument(
+        "--barcode-tags",
+        dest="barcode_tags",
+        help="BAM file barcodes tags in the experiment. " +
+             "Comma-separated list of barcodes, should match number of values in '--barcodes'. " +
+             "Default is '{}'".format(",".join(default)),
+        default=",".join(default),
+        type=str)
+    default = ['11', '16', '8']
+    parser.add_argument(
+        "--barcode-lengths",
+        dest="barcode_lengths",
+        help="Length of barcodes tags in the experiment. " +
+             "Comma-separated list of barcodes, should match number of values in '--barcodes'. " +
+             "Default is '{}'".format(",".join(default)),
+        default=",".join(default),
         type=str)
     default = 0
     parser.add_argument(
@@ -145,12 +186,25 @@ def arg_parser(parser):
         help="Maximum mismatches to allow correction. Default {}".format(default),
         default=default,
         type=int)
+    default = ['round1']
+    parser.add_argument(
+        "--correct-barcodes",
+        dest="correct_barcodes",
+        help="Cell-labeling barcodes to match against reference and correct. " +
+             "Comma-separated list of barcodes matching '--barcodes'. " +
+             "Default is '{}'".format(",".join(default)),
+        default=",".join(default),
+        type=str)
 
     return parser
 
 
 def extract_barcodes(
-        input_file, start=0, end=1e100):
+        input_file,
+        barcodes=['round1', 'round2', 'umi'],
+        barcode_tags=['r1', 'r2', 'RX'],
+        barcode_lengths=[11, 16, 8],
+        start=0, end=1e100):
     """
     """
     from collections import Counter
@@ -159,7 +213,7 @@ def extract_barcodes(
     errors = Counter()
     cells = list()
     i = 0
-    print("# " + time.asctime() + " - Starting to extract barcodes.")
+    print("# " + time.asctime() + " - Starting to extract barcodes '{}'.".format(", ".join(barcodes)))
     for read in input_handle:
         i += 1
 
@@ -170,54 +224,33 @@ def extract_barcodes(
 
         if (i - 1) % 1000000 == 0:
             print(i)
-        umi = round1 = round2 = np.nan
 
-        # round 1
-        if read.has_tag("r1"):
-            seq1 = read.get_tag("r1")
-            if len(seq1) != 11:
-                errors["round1_not_11bp"] += 1
+        res = [read.qname]
+        for barcode, tag, length in zip(barcodes, barcode_tags, barcode_lengths):
+            if read.has_tag(tag):
+                seq = read.get_tag(tag)
+                if len(seq) != length:
+                    errors[barcode + "_not_right_length"] += 1
+                else:
+                    res.append(seq)
             else:
-                round1 = seq1
-        else:
-            errors["no_round1_tag"] += 1
-        # round 2
-        if read.has_tag("r2"):
-            seq2 = read.get_tag("r2")
-            if len(seq2) != 11:
-                errors["round2_not_11bp"] += 1
-            else:
-                round2 = seq2
-        else:
-            errors["no_round2_tag"] += 1
-        # umi
-        if read.has_tag("RX"):
-            seq3 = read.get_tag("RX")
-            if len(seq3) != 8:
-                errors["umi_not_8bp"] += 1
-            else:
-                umi = seq3
-        else:
-            errors["no_umi_tag"] += 1
-
-        cells.append([read.qname, round1, round2, umi])
-        # cells.append([round1, round2, umi])
+                errors[barcode + "_no_tag"] += 1
+        cells.append(res)
 
     print("# " + time.asctime() + " - Done extracting barcodes.")
     print("## Errors:")
     print(errors)
-    return pd.DataFrame(data=cells, columns=["read", "round1", "round2", "umi"])
+    return pd.DataFrame(data=cells, columns=["read"] + barcodes)
 
 
-def annotate_barcodes(cells, annotation):
+def annotate_barcodes(cells, annotation, barcodes=["round1", "round2"]):
     def count_mismatches(a, b):
         return sum(a != b for a, b in zip(a, b))
 
-    cell_barcodes = ["round1", "round2"]
     # fraction mapping to annotation
     print("# " + time.asctime() + " - Starting to annotate barcodes.")
     print("## Matching to annotation.")
-    for a, barcode in enumerate(cell_barcodes):
+    for a, barcode in enumerate(barcodes):
         print(" - " + barcode)
         cells.loc[:, barcode + "_correct"] = (
             cells[barcode].isin(
@@ -225,11 +258,13 @@ def annotate_barcodes(cells, annotation):
         cells.loc[:, barcode + '_contains_N'] = cells[barcode].str.contains("N").astype(int)
 
     print("# " + time.asctime() + " - Starting to correct barcodes.")
-    for barcode in cell_barcodes[::-1]:
+    for barcode in barcodes[::-1]:
         print("## " + time.asctime() + " - " + barcode)
         ref = annotation.loc[annotation["barcode_type"] == barcode, "barcode_sequence"]
         print(" - Creating query")
-        query = cells.loc[(cells[barcode + "_correct"] == 0) & (cells[barcode + "_contains_N"] == 0), barcode].drop_duplicates()
+        query = cells.loc[
+            (cells[barcode + "_correct"] == 0) & (cells[barcode + "_contains_N"] == 0),
+            barcode].drop_duplicates()
         print(" - Finding mismatches against reference")
         mis = pd.DataFrame([
             (q, count_mismatches(q, b), b)

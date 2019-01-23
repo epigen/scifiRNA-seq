@@ -1,37 +1,26 @@
 
 # Edit these parameters
 RUN_NAMES=(
-sci-RNA-seq_SCI012_12-nuclei_various-cycles
-sci-RNA-seq_SCI012_24-nuclei_various-cycles
-sci-RNA-seq_SCI012_12-nuclei_various-enzymes
-sci-RNA-seq_SCI012_24-nuclei_various-enzymes
-sci-RNA-seq_SCI013_12-cells_various-rtprimers
-sci-RNA-seq_SCI013_12-nuclei_various-rtprimers
+sci-RNA-seq_SCI016_Tn5-minus_RP_1uL
+sci-RNA-seq_SCI016_Tn5-minus_RP_4uL
+sci-RNA-seq_SCI016_Tn5-plus
+
 )
 FLOWCELLS=(
-BSF_0535_H2MJ2BGX9
-BSF_0535_H2MJ2BGX9
-BSF_0535_H2MJ2BGX9
-BSF_0535_H2MJ2BGX9
-BSF_0535_H2MJ2BGX9
-BSF_0535_H2MJ2BGX9
+BSF_0565_H5TWWBGX9
+BSF_0565_H5TWWBGX9
+BSF_0565_H5TWWBGX9
 )
 BSF_NAMES=(
-SCI_012_1_SSVI_12_nuclei
-SCI_012_4_SSVI_24_nuclei
-SCI_012_6_ProtoMax_12_nuclei
-SCI_012_7_ProtoMax_24_nuclei
-SCI_013_1_SSVI_12_cells
-SCI_013_2_SSVI_12_nuclei
+SCI_016_Tn5_minus_15_01_19_1ul_primer_S48435
+SCI_016_Tn5_minus_17_01_19_4ul_primer_S48436
+SCI_016_Tn5_plus_15_01_19_S48437
 )
 
 BARCODE_ANNOTATIONS=(
-/scratch/lab_bock/shared/projects/sci-rna/metadata/sciRNA-seq.SCI012.oligos_2018-11-14.csv
-/scratch/lab_bock/shared/projects/sci-rna/metadata/sciRNA-seq.SCI012.oligos_2018-11-14.csv
-/scratch/lab_bock/shared/projects/sci-rna/metadata/sciRNA-seq.SCI012.oligos_2018-11-14.csv
-/scratch/lab_bock/shared/projects/sci-rna/metadata/sciRNA-seq.SCI012.oligos_2018-11-14.csv
-/scratch/lab_bock/shared/projects/sci-rna/metadata/sciRNA-seq.SCI013.oligos_2018-11-14.csv
-/scratch/lab_bock/shared/projects/sci-rna/metadata/sciRNA-seq.SCI013.oligos_2018-11-14.csv
+/scratch/lab_bock/shared/projects/sci-rna/metadata/sciRNA-seq.SCI016.oligos_2019-01-22.csv
+/scratch/lab_bock/shared/projects/sci-rna/metadata/sciRNA-seq.SCI016.oligos_2019-01-22.csv
+/scratch/lab_bock/shared/projects/sci-rna/metadata/sciRNA-seq.SCI016.oligos_2019-01-22.csv
 )
 
 
@@ -65,6 +54,54 @@ sbatch -J ${RUN_NAME}.to_fastq.part_${I} \
 done
 done
 
+
+# for randomly primed samples remove first 4 bases
+for SAMPLE in 0 1; do
+FLOWCELL=${FLOWCELLS[$SAMPLE]}
+BSF_NAME=${BSF_NAMES[$SAMPLE]}
+RUN_NAME=${RUN_NAMES[$SAMPLE]}
+echo $FLOWCELL $BSF_NAME $RUN_NAME
+for I in ${PARTS[@]}; do
+sbatch -J ${RUN_NAME}.get_fastq_header.part_${I} \
+-o ${ROOT_OUTPUT_DIR}/logs/${RUN_NAME}.get_fastq_header.part_${I}.log \
+-c 1 --mem 10000 -p shortq \
+--wrap "sed -n '1p;1~2p' ${ROOT_OUTPUT_DIR}/seqs/${RUN_NAME}.part_${I}.fastq | tail -n +2 > ${ROOT_OUTPUT_DIR}/seqs/${RUN_NAME}.part_${I}.fastq.header"
+sbatch -J ${RUN_NAME}.trim_fastq.part_${I} \
+-o ${ROOT_OUTPUT_DIR}/logs/${RUN_NAME}.trim_fastq.part_${I}.log \
+-c 1 --mem 10000 -p shortq \
+--wrap "sed -n '1p;0~2p' ${ROOT_OUTPUT_DIR}/seqs/${RUN_NAME}.part_${I}.fastq | tail -n +2 | cut -c 5-100 > ${ROOT_OUTPUT_DIR}/seqs/${RUN_NAME}.part_${I}.fastq.content"
+done
+done
+
+for SAMPLE in 0 1; do
+FLOWCELL=${FLOWCELLS[$SAMPLE]}
+BSF_NAME=${BSF_NAMES[$SAMPLE]}
+RUN_NAME=${RUN_NAMES[$SAMPLE]}
+echo $FLOWCELL $BSF_NAME $RUN_NAME
+for I in ${PARTS[@]}; do
+sbatch -J ${RUN_NAME}.trim_fastq.part_${I} \
+-o ${ROOT_OUTPUT_DIR}/logs/${RUN_NAME}.trim_fastq.part_${I}.log \
+-c 1 --mem 10000 -p shortq \
+--wrap "paste -d '\n' ${ROOT_OUTPUT_DIR}/seqs/${RUN_NAME}.part_${I}.fastq.header ${ROOT_OUTPUT_DIR}/seqs/${RUN_NAME}.part_${I}.fastq.content > ${ROOT_OUTPUT_DIR}/seqs/${RUN_NAME}.part_${I}.fastq"
+done
+done
+
+for SAMPLE in 0 1; do
+FLOWCELL=${FLOWCELLS[$SAMPLE]}
+BSF_NAME=${BSF_NAMES[$SAMPLE]}
+RUN_NAME=${RUN_NAMES[$SAMPLE]}
+echo $FLOWCELL $BSF_NAME $RUN_NAME
+for I in ${PARTS[@]}; do
+sbatch -J ${RUN_NAME}.trim_fastq.part_${I} \
+-o ${ROOT_OUTPUT_DIR}/logs/${RUN_NAME}.trim_fastq.part_${I}.log \
+-c 1 --mem 10000 -p shortq \
+--wrap "gzip -S .untrimmed.gz ${ROOT_OUTPUT_DIR}/seqs/${RUN_NAME}.part_${I}.fastq"
+done
+done
+
+rm ${ROOT_OUTPUT_DIR}/seqs/*.{header,content}
+
+
 # Map Reads
 for SAMPLE in ${SAMPLE_NUMBERS[@]}; do
 RUN_NAME=${RUN_NAMES[$SAMPLE]}
@@ -90,7 +127,7 @@ echo $RUN_NAME
 for I in ${PARTS[@]}; do
 sbatch -J ${RUN_NAME}.sort.part_${I} \
 -o ${ROOT_OUTPUT_DIR}/logs/${RUN_NAME}.sort.part_${I}.log \
--c 12 --mem 40000 -p shortq --time 07:30:00 \
+-c 8 --mem 40000 -p shortq --time 07:30:00 \
 --wrap "sambamba sort -t 8 -n \
 ${ROOT_OUTPUT_DIR}/star/${RUN_NAME}.STAR.part_${I}.Aligned.out.bam"
 done
@@ -104,7 +141,7 @@ echo $RUN_NAME
 for I in ${PARTS[@]}; do
 sbatch -J ${RUN_NAME}.htseq-count.part_${I} \
 -o ${ROOT_OUTPUT_DIR}/logs/${RUN_NAME}.htseq-count.part_${I}.log \
--c 12 --mem 40000 -p shortq \
+-c 1 --mem 20000 -p shortq \
 --wrap "samtools view \
 ${ROOT_OUTPUT_DIR}/star/${RUN_NAME}.STAR.part_${I}.Aligned.out.sorted.bam | \
 ~/.local/bin/htseq-count -f sam -a 10 -t exon -i gene_id \
@@ -179,7 +216,12 @@ sbatch -J ${RUN_NAME}.barcode_extract.part_${I}.${START}_${END}.mis${MISMATCHES}
 -o ${ROOT_OUTPUT_DIR}/logs/${RUN_NAME}.barcode_extract.part_${I}.${START}_${END}.mis${MISMATCHES}.log \
 -c 1 --mem 20000 -p shortq --time 1:00:00 \
 --wrap "python -u ${ROOT_OUTPUT_DIR}/src/scirnaseq.extract_barcodes.py \
---mode slim --max-mismatches $MISMATCHES \
+--mode slim \
+--barcodes round1,round2,umi \
+--barcode-tags r1,r2,RX \
+--barcode-lengths 11,16,8 \
+--correct-barcodes round1 \
+--max-mismatches $MISMATCHES \
 --start ${START} --end ${END} \
 -a ${BARCODE_ANNOTATION} \
 -o ${ROOT_OUTPUT_DIR}/barcodes/${RUN_NAME}.part_${I}.barcodes.${START}_${END}.mis_${MISMATCHES}.csv.gz \
@@ -198,7 +240,7 @@ for MISMATCHES in `seq 1 $((MAX_MISMATCHES+1))`; do
 echo $RUN_NAME $((MISMATCHES-1)) $MISMATCHES
 sbatch -J ${RUN_NAME}.inspect_barcodes.mis${MISMATCHES} \
 -o ${ROOT_OUTPUT_DIR}/logs/${RUN_NAME}.inspect_barcodes.mis${MISMATCHES}.log \
--c 1 --mem 80000 -p shortq --time 1:00:00 \
+-c 1 --mem 80000 -p shortq --time 06:00:00 \
 --wrap "python -u ${ROOT_OUTPUT_DIR}/src/scirnaseq.inspect_barcodes.py \
 --min-mismatches $((MISMATCHES-1)) --max-mismatches $MISMATCHES \
 --barcodes round1,round2 \

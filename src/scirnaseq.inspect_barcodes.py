@@ -39,18 +39,20 @@ def get_cli_arguments():
             "for specific documentation."]))
     parser.add_argument(
         dest="run_name",
-        help="Name of run of experiment. Must match produced input files e.g. BSF_0477_HJ7J7BGX2",
+        help="Name of run of experiment. Must match produced input files e.g. 'sciRNA_016'",
         type=str)
     parser.add_argument(
         "-a", "--annotation",
         dest="annotation",
-        help="Path to CSV file with barcode annotation. e.g. metadata/sciRNA-seq.oligos_2018-05-22v2.csv",
+        help="Path to CSV file with barcode annotation. " +
+             "e.g. metadata/sciRNA-seq.oligos_2018-05-22v2.csv",
         type=str)
-    default = ["round1", "round2", "round3a", "round3b"]
+    default = ["round1", "round2"]
     parser.add_argument(
         "-b", "--barcodes",
         dest="cell_barcodes",
-        help="Cell barcodes used. A comma-delimited (no spaces) list. Default is '{}'.".format("','".join(default)),
+        help="Cell barcodes used. A comma-delimited (no spaces) list. " +
+             " Default is '{}'.".format("','".join(default)),
         type=str)
     default = "results"
     parser.add_argument(
@@ -63,17 +65,20 @@ def get_cli_arguments():
     parser.add_argument(
         "--min-mismatches",
         dest="min_mismatches",
-        help="Minimum mismatches input files were allowed to have. Default {}".format(default),
+        help="Minimum mismatches input files were allowed to have. " +
+             "Default {}".format(default),
         default=default,
         type=int)
     default = 1
     parser.add_argument(
         "--max-mismatches",
         dest="max_mismatches",
-        help="Maximum mismatches input files were allowed to have. Default {}".format(default),
+        help="Maximum mismatches input files were allowed to have. "
+             "Default {}".format(default),
         default=default,
         type=int)
     # args = parser.parse_args("-a metadata/sciRNA-seq.oligos_2018-11-14.csv -b round1,round2 --max-mismatches 0 -".split(" "))
+    # args = parser.parse_args("-a metadata/sciRNA-seq.SCI016.oligos_2019-01-22.csv -b round1,round2 --max-mismatches 0 sci-RNA-seq_SCI016_Tn5-minus_RP_1uL".split(" "))
     print("# " + time.asctime() + " - Parsing command line arguments:")
     args = parser.parse_args()
     args.cell_barcodes = args.cell_barcodes.split(",")
@@ -100,7 +105,8 @@ def main():
         umi_dup_file = os.path.join("barcodes", output_prefix + "barcode_umi_dups.count.csv")
         if not os.path.exists(hdf_file):
             print("# " + time.asctime() + " - Concatenating barcode files into HDF file.")
-            pieces = glob(os.path.join("barcodes", "{}.part_*.barcodes.*_*.mis_{}.csv.gz".format(args.run_name, mismatches)))
+            pieces = glob(os.path.join("barcodes", "{}.part_*.barcodes.*_*.mis_{}.csv.gz".format(
+                args.run_name, mismatches)))
             pieces = sorted_nicely(pieces)
 
             print("## " + time.asctime() + " - barcode files to read: '{}'.".format(", ".join(pieces)))
@@ -144,7 +150,10 @@ def main():
             # # per well
             # add well information
             for barcode in args.cell_barcodes:
-                a = annotation.loc[annotation['barcode_type'] == barcode, ['barcode_sequence', 'plate_well']].rename(columns={"barcode_sequence": barcode, "plate_well": barcode + "_well"})
+                a = (
+                    annotation.loc[
+                        annotation['barcode_type'] == barcode, ['barcode_sequence', 'plate_well']]
+                    .rename(columns={"barcode_sequence": barcode, "plate_well": barcode + "_well"}))
                 df = pd.merge(df, a, on=barcode, how='left')
             all_reads = df.groupby(['round1_well'])['gene'].count()
             unmapped = df.groupby(['round1_well'])['gene'].apply(lambda x: x.str.startswith("__").sum())
@@ -155,7 +164,8 @@ def main():
             rates.to_csv(mapping_rate_file)
 
             # remove unmapped reads
-            print("# " + time.asctime() + " - Removing unmapped reads and collapsing to unique UMIs per cell per gene.")
+            msg = " - Removing unmapped reads and collapsing to unique UMIs per cell per gene."
+            print("# " + time.asctime() + msg)
             df2 = df.loc[~df['gene'].str.startswith("__"), :]
 
             print("# " + time.asctime() + " - Investigating duplicates.")
@@ -187,7 +197,10 @@ def main():
 
         # add well information
         for barcode in args.cell_barcodes:
-            a = annotation.loc[annotation['barcode_type'] == barcode, ['barcode_sequence', 'plate_well']].rename(columns={"barcode_sequence": barcode, "plate_well": barcode + "_well"})
+            a = (annotation.loc[
+                annotation['barcode_type'] == barcode,
+                ['barcode_sequence', 'plate_well']]
+                .rename(columns={"barcode_sequence": barcode, "plate_well": barcode + "_well"}))
             duplicates_per_molecule = pd.merge(duplicates_per_molecule, a, on=barcode, how='left')
 
         all_umis = duplicates_per_molecule.groupby("round1_well")['count'].count()
@@ -198,7 +211,8 @@ def main():
         dup_rate_file = os.path.join("barcodes", output_prefix + "barcode_umi_dups.per_well.csv")
         rates.to_csv(dup_rate_file)
 
-        print("## " + time.asctime() + " - mean unique UMI rate: '{}'".format(rates.loc[rates['all_reads'] > 200, 'unique_rate'].mean()))
+        msg = " - mean unique UMI rate: '{}'".format(rates.loc[rates['all_reads'] > 200, 'unique_rate'].mean())
+        print("## " + time.asctime() + msg)
 
         # bins = [int(np.round(x, 0)) for x in [0, 1] + list(np.logspace(1, 4.5, 20))]
         # dups = pd.cut(duplicates_per_molecule[3], bins).value_counts()
@@ -248,16 +262,17 @@ def main():
         df3.loc[df3['gene'].str.startswith("ENSMUS"), "species"] = 'mouse'
 
         # Species mixing experiment
-        species_count = pd.pivot_table(df3, index=args.cell_barcodes, columns="species", values="umi", aggfunc=sum, fill_value=0)
+        species_count = pd.pivot_table(
+            df3, index=args.cell_barcodes, columns="species", values="umi", aggfunc=sum, fill_value=0)
 
         s = pd.DataFrame()
         for min_umi in [1, 2, 5, 10, 20, 30, 40, 50, 100, 500, 1000, 2500, 5000, 10000]:
             p = species_count.loc[species_count.sum(axis=1) >= min_umi, :]
             p = (p.T / p.sum(1)).T
             total = float(p.shape[0])
-            s.loc['pure human', min_umi] = (p['human'] >= 0.8).sum() / total # pure human cells
-            s.loc['pure mouse', min_umi] = (p['mouse'] >= 0.8).sum() / total # pure mouse cells
-            s.loc['mixture', min_umi] = (((p['mouse'] < 0.8) & (p['human'] < 0.8))).sum() / total # mixtures
+            s.loc['pure human', min_umi] = (p['human'] >= 0.8).sum() / total  # pure human cells
+            s.loc['pure mouse', min_umi] = (p['mouse'] >= 0.8).sum() / total  # pure mouse cells
+            s.loc['mixture', min_umi] = (((p['mouse'] < 0.8) & (p['human'] < 0.8))).sum() / total  # mixtures
         s *= 100
 
         fig, axis = plt.subplots(1, 1, figsize=(1 * 4, 4))
@@ -265,7 +280,9 @@ def main():
         sns.heatmap(s, ax=axis, cbar_kws={"label": "Percent of total"}, vmin=0, square=True)
         axis.set_xlabel("Minimum UMIs per cell")
         axis.set_yticklabels(axis.get_yticklabels(), rotation=0, ha="right", va="center")
-        fig.savefig(os.path.join(args.output_dir, output_prefix + "species_mix.summary.heatmap.svg"), bbox_inches="tight", dpi=300)
+        fig.savefig(
+            os.path.join(
+                args.output_dir, output_prefix + "species_mix.summary.heatmap.svg"), bbox_inches="tight", dpi=300)
 
         fig, axis = plt.subplots(1, 2, figsize=(2 * 4, 4))
         fig.suptitle(args.run_name)
@@ -276,7 +293,9 @@ def main():
         axis[0].set_ylabel("Percent of total")
         axis[1].set_ylabel("Percent of total")
         sns.despine(fig)
-        fig.savefig(os.path.join(args.output_dir, output_prefix + "species_mix.summary.barplot.svg"), bbox_inches="tight", dpi=300)
+        fig.savefig(
+            os.path.join(
+                args.output_dir, output_prefix + "species_mix.summary.barplot.svg"), bbox_inches="tight", dpi=300)
 
         fig, axis = plt.subplots(1, 2, figsize=(2 * 4, 4))
         fig.suptitle(args.run_name)
@@ -302,7 +321,9 @@ def main():
         axis[1].set_xlabel("Mouse (log2 UMIs)")
         axis[1].set_ylabel("Human (log2 UMIs)")
         sns.despine(fig)
-        fig.savefig(os.path.join(args.output_dir, output_prefix + "species_mix.plot.svg"), bbox_inches="tight", dpi=300)
+        fig.savefig(
+            os.path.join(
+                args.output_dir, output_prefix + "species_mix.plot.svg"), bbox_inches="tight", dpi=300)
 
         grid = sns.jointplot(
             species_count.loc[:, "mouse"],
@@ -312,7 +333,9 @@ def main():
         grid.ax_joint.set_ylabel("Human (UMIs)")
         grid.fig.suptitle(args.run_name)
         sns.despine(grid.fig)
-        grid.fig.savefig(os.path.join(args.output_dir, output_prefix + "species_mix.jointplot.svg"), bbox_inches="tight", dpi=300)
+        grid.fig.savefig(
+            os.path.join(
+                args.output_dir, output_prefix + "species_mix.jointplot.svg"), bbox_inches="tight", dpi=300)
         grid = sns.jointplot(
             np.log2(1 + species_count.loc[:, "mouse"]),
             np.log2(1 + species_count.loc[:, "human"]), rasterized=True,
@@ -320,7 +343,9 @@ def main():
         grid.ax_joint.set_xlabel("Mouse (log2 UMIs)")
         grid.ax_joint.set_ylabel("Human (log2 UMIs)")
         sns.despine(grid.fig)
-        grid.fig.savefig(os.path.join(args.output_dir, output_prefix + "species_mix.jointplot.log2.svg"), bbox_inches="tight", dpi=300)
+        grid.fig.savefig(
+            os.path.join(
+                args.output_dir, output_prefix + "species_mix.jointplot.log2.svg"), bbox_inches="tight", dpi=300)
 
 
 def sorted_nicely(l):
