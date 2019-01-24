@@ -26,13 +26,20 @@ df = df.loc[df['experimental_batch'].isin(["SCI016"]), :]
 cell_barcodes = ['round1', 'round2']
 max_mismatches = 3
 
+# experiment annotation
 annot_16 = pd.read_csv(os.path.join("metadata", "sciRNA-seq.SCI016.oligos_2019-01-22.csv"))
+# # this assumes only plate 1 (ONE) was used to multiplex experiments!
+annot_16 = annot_16.loc[annot_16['barcode_type'] == 'round1']
+
+# half plate
 annot_16['plate_half'] = annot_16['plate_well'].str.contains("E|F|G|H").astype(int)
+# quarter plate
 annot_16.loc[annot_16['plate_well'].str.contains("A|B"), 'plate_quarter'] = 0
 annot_16.loc[annot_16['plate_well'].str.contains("C|D"), 'plate_quarter'] = 1
 annot_16.loc[annot_16['plate_well'].str.contains("E|F"), 'plate_quarter'] = 2
 annot_16.loc[annot_16['plate_well'].str.contains("G|H"), 'plate_quarter'] = 3
 annot_16['plate_quarter'] = annot_16['plate_quarter'].astype(int)
+# octo plate
 annot_16['plate_octo'] = np.nan
 q = -1
 for l in string.ascii_uppercase[:8]:
