@@ -15,5 +15,6 @@ I decided not to keep all the code specific to each version/run, but simply to g
 |**SCI007/010/011**|sciRNA-seq optimizations: nuclei extraction/preparation/sorting|Mildly improved|
 |**SCI012-013**|sciRNA-seq optimizations: various enzymes, cycles, cells vs nuclei, anchored vs unanchored primers|Greatly improved|
 |**SCI016**|first scifiRNA-seq|Failure, but promising|
+|**SCI017**|scifiRNA-seq|Success, but somewhat innefficient|
 
 the experiment IDs correspond to the [metadata annotations](metadata/annotation.csv)

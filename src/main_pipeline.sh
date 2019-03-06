@@ -1,26 +1,17 @@
 
 # Edit these parameters
 RUN_NAMES=(
-sci-RNA-seq_SCI016_Tn5-minus_RP_1uL
-sci-RNA-seq_SCI016_Tn5-minus_RP_4uL
-sci-RNA-seq_SCI016_Tn5-plus
-
+sci-RNA-seq_SCI017_SSIV_6K
 )
 FLOWCELLS=(
-BSF_0565_H5TWWBGX9
-BSF_0565_H5TWWBGX9
-BSF_0565_H5TWWBGX9
+BSF_0572_HGJC5BGX9
 )
 BSF_NAMES=(
-SCI_016_Tn5_minus_15_01_19_1ul_primer_S48435
-SCI_016_Tn5_minus_17_01_19_4ul_primer_S48436
-SCI_016_Tn5_plus_15_01_19_S48437
+SCI017_SSIV_6K_S49236
 )
 
 BARCODE_ANNOTATIONS=(
-/scratch/lab_bock/shared/projects/sci-rna/metadata/sciRNA-seq.SCI016.oligos_2019-01-22.csv
-/scratch/lab_bock/shared/projects/sci-rna/metadata/sciRNA-seq.SCI016.oligos_2019-01-22.csv
-/scratch/lab_bock/shared/projects/sci-rna/metadata/sciRNA-seq.SCI016.oligos_2019-01-22.csv
+/scratch/lab_bock/shared/projects/sci-rna/metadata/sciRNA-seq.SCI017.oligos_2019-02-11.csv
 )
 
 
@@ -33,6 +24,7 @@ GTF_FILE=/data/groups/lab_bock/shared/resources/genomes/hg38_mm10_transgenes_Tcr
 
 
 # Don't edit from here
+cd $ROOT_OUTPUT_DIR
 mkdir -p $ROOT_OUTPUT_DIR/{logs,seqs,fastqc,star,barcodes,expression}
 SAMPLE_NUMBERS=(`seq 0 $((${#RUN_NAMES[@]} - 1))`)
 PARTS=`seq 1 $N_PARTS`
@@ -56,7 +48,7 @@ done
 
 
 # for randomly primed samples remove first 4 bases
-for SAMPLE in 0 1; do
+for SAMPLE in 0; do
 FLOWCELL=${FLOWCELLS[$SAMPLE]}
 BSF_NAME=${BSF_NAMES[$SAMPLE]}
 RUN_NAME=${RUN_NAMES[$SAMPLE]}
@@ -73,7 +65,7 @@ sbatch -J ${RUN_NAME}.trim_fastq.part_${I} \
 done
 done
 
-for SAMPLE in 0 1; do
+for SAMPLE in 0; do
 FLOWCELL=${FLOWCELLS[$SAMPLE]}
 BSF_NAME=${BSF_NAMES[$SAMPLE]}
 RUN_NAME=${RUN_NAMES[$SAMPLE]}
@@ -86,18 +78,18 @@ sbatch -J ${RUN_NAME}.trim_fastq.part_${I} \
 done
 done
 
-for SAMPLE in 0 1; do
-FLOWCELL=${FLOWCELLS[$SAMPLE]}
-BSF_NAME=${BSF_NAMES[$SAMPLE]}
-RUN_NAME=${RUN_NAMES[$SAMPLE]}
-echo $FLOWCELL $BSF_NAME $RUN_NAME
-for I in ${PARTS[@]}; do
-sbatch -J ${RUN_NAME}.trim_fastq.part_${I} \
--o ${ROOT_OUTPUT_DIR}/logs/${RUN_NAME}.trim_fastq.part_${I}.log \
--c 1 --mem 10000 -p shortq \
---wrap "gzip -S .untrimmed.gz ${ROOT_OUTPUT_DIR}/seqs/${RUN_NAME}.part_${I}.fastq"
-done
-done
+# for SAMPLE in 0; do
+# FLOWCELL=${FLOWCELLS[$SAMPLE]}
+# BSF_NAME=${BSF_NAMES[$SAMPLE]}
+# RUN_NAME=${RUN_NAMES[$SAMPLE]}
+# echo $FLOWCELL $BSF_NAME $RUN_NAME
+# for I in ${PARTS[@]}; do
+# sbatch -J ${RUN_NAME}.trim_fastq.part_${I} \
+# -o ${ROOT_OUTPUT_DIR}/logs/${RUN_NAME}.trim_fastq.part_${I}.log \
+# -c 1 --mem 10000 -p shortq \
+# --wrap "gzip -S .untrimmed.gz ${ROOT_OUTPUT_DIR}/seqs/${RUN_NAME}.part_${I}.fastq"
+# done
+# done
 
 rm ${ROOT_OUTPUT_DIR}/seqs/*.{header,content}
 
@@ -134,7 +126,7 @@ done
 done
 
 
-# tag with gene
+# count exonic reads per gene
 for SAMPLE in ${SAMPLE_NUMBERS[@]}; do
 RUN_NAME=${RUN_NAMES[$SAMPLE]}
 echo $RUN_NAME
@@ -144,7 +136,7 @@ sbatch -J ${RUN_NAME}.htseq-count.part_${I} \
 -c 1 --mem 20000 -p shortq \
 --wrap "samtools view \
 ${ROOT_OUTPUT_DIR}/star/${RUN_NAME}.STAR.part_${I}.Aligned.out.sorted.bam | \
-~/.local/bin/htseq-count -f sam -a 10 -t exon -i gene_id \
+~/.local/bin/htseq-count -f sam -a 10 -t exon -i gene_id -s yes \
 --secondary-alignments=ignore --supplementary-alignments=ignore --additional-attr=gene_name \
 --samout=${ROOT_OUTPUT_DIR}/star/${RUN_NAME}.STAR.htseq-count.sam.part_${I}.sam \
 - \
@@ -152,6 +144,55 @@ $GTF_FILE > \
 ${ROOT_OUTPUT_DIR}/star/${RUN_NAME}.STAR.quant.part_${I}.tsv"
 done
 done
+
+# count all reads overlapping with a gene
+for SAMPLE in ${SAMPLE_NUMBERS[@]}; do
+RUN_NAME=${RUN_NAMES[$SAMPLE]}
+echo $RUN_NAME
+for I in ${PARTS[@]}; do
+sbatch -J ${RUN_NAME}.htseq-count.part_${I} \
+-o ${ROOT_OUTPUT_DIR}/logs/${RUN_NAME}.htseq-count.part_${I}.log \
+-c 1 --mem 20000 -p shortq \
+--wrap "samtools view \
+${ROOT_OUTPUT_DIR}/star/${RUN_NAME}.STAR.part_${I}.Aligned.out.sorted.bam | \
+~/.local/bin/htseq-count -f sam -a 10 -t gene -i gene_id \
+--secondary-alignments=ignore --supplementary-alignments=ignore --additional-attr=gene_name \
+--samout=${ROOT_OUTPUT_DIR}/star/${RUN_NAME}.STAR.htseq-count_gene.sam.part_${I}.sam \
+- \
+$GTF_FILE > \
+${ROOT_OUTPUT_DIR}/star/${RUN_NAME}.STAR.quant_gene.part_${I}.tsv"
+done
+done
+
+
+# import pandas as pd
+# import matplotlib.pyplot as plt
+# ROOT_OUTPUT_DIR="/scratch/lab_bock/shared/projects/sci-rna"
+# RUN_NAME="sci-RNA-seq_SCI017_SSIV_6K"
+# I=1
+# exon = f"{ROOT_OUTPUT_DIR}/star/{RUN_NAME}.STAR.quant.part_{I}.tsv"
+# gene = f"{ROOT_OUTPUT_DIR}/star/{RUN_NAME}.STAR.quant_gene.part_{I}.tsv"
+# exon = pd.read_csv(exon, header=None, names=['t', 'g', 'exon'], sep="\t")
+# exon.loc[exon['g'].isnull(), 'g'] = exon.loc[exon['g'].isnull(), 't']
+# gene = pd.read_csv(gene, header=None, names=['t', 'g', 'gene'], sep="\t")
+# gene.loc[gene['g'].isnull(), 'g'] = gene.loc[gene['g'].isnull(), 't']
+
+# xy = exon.set_index("g")[['exon']].join(gene.set_index("g")['gene'])
+# xy = xy.loc[~xy.index.str.startswith("__")]
+
+
+# fig, axis = plt.subplots(1, figsize=(3, 3))
+# sns.barplot(x=xy.columns, y=xy.sum() * 4, ax=axis)
+# axis.set_ylabel("Total aligned reads")
+# fig.savefig(f"{ROOT_OUTPUT_DIR}/results/{RUN_NAME}.STAR.quant.exon_vs_gene.barplot.svg", dpi=300, bbox_inches="tight")
+
+# xy2 = np.log2(1 + xy)
+
+# fig, axis = plt.subplots(1, figsize=(3, 3))
+# axis.scatter(xy2['exon'], xy2['gene'], s=2, alpha=0.1, rasterized=True)
+# axis.set_xlabel("Exonic reads (log2)")
+# axis.set_ylabel("Whole genebody reads (log2)")
+# fig.savefig(f"{ROOT_OUTPUT_DIR}/results/{RUN_NAME}.STAR.quant.exon_vs_gene.scatter.svg", dpi=300, bbox_inches="tight")
 
 
 for SAMPLE in ${SAMPLE_NUMBERS[@]}; do
@@ -164,16 +205,16 @@ sbatch -J ${RUN_NAME}.extract_read.part_${I} \
 -c 1 --mem 20000 -p shortq \
 --wrap "\
 cut -f 1 \
-${ROOT_OUTPUT_DIR}/star/${RUN_NAME}.STAR.htseq-count.sam.part_${I}.sam \
-> ${ROOT_OUTPUT_DIR}/star/${RUN_NAME}.STAR.htseq-count.read.part_${I}.txt"
+${ROOT_OUTPUT_DIR}/star/${RUN_NAME}.STAR.htseq-count_gene.sam.part_${I}.sam \
+> ${ROOT_OUTPUT_DIR}/star/${RUN_NAME}.STAR.htseq-count_gene.read.part_${I}.txt"
 # extract only gene
 sbatch -J ${RUN_NAME}.extract_gene.part_${I} \
 -o ${ROOT_OUTPUT_DIR}/logs/${RUN_NAME}.extract_gene.part_${I}.log \
 -c 1 --mem 20000 -p shortq \
 --wrap "\
 sed 's/^HWI.*XF:Z://g' \
-${ROOT_OUTPUT_DIR}/star/${RUN_NAME}.STAR.htseq-count.sam.part_${I}.sam \
-> ${ROOT_OUTPUT_DIR}/star/${RUN_NAME}.STAR.htseq-count.gene.part_${I}.txt"
+${ROOT_OUTPUT_DIR}/star/${RUN_NAME}.STAR.htseq-count_gene.sam.part_${I}.sam \
+> ${ROOT_OUTPUT_DIR}/star/${RUN_NAME}.STAR.htseq-count_gene.gene.part_${I}.txt"
 done
 done
 
@@ -188,10 +229,10 @@ sbatch -J ${RUN_NAME}.join_read_gene.part_${I} \
 -c 1 --mem 20000 -p shortq \
 --wrap "\
 paste \
-${ROOT_OUTPUT_DIR}/star/${RUN_NAME}.STAR.htseq-count.read.part_${I}.txt \
-${ROOT_OUTPUT_DIR}/star/${RUN_NAME}.STAR.htseq-count.gene.part_${I}.txt \
+${ROOT_OUTPUT_DIR}/star/${RUN_NAME}.STAR.htseq-count_gene.read.part_${I}.txt \
+${ROOT_OUTPUT_DIR}/star/${RUN_NAME}.STAR.htseq-count_gene.gene.part_${I}.txt \
 | sed 's/\t/,/g' \
-> ${ROOT_OUTPUT_DIR}/star/${RUN_NAME}.STAR.htseq-count.read_gene.part_${I}.csv"
+> ${ROOT_OUTPUT_DIR}/star/${RUN_NAME}.STAR.htseq-count_gene.read_gene.part_${I}.csv"
 done
 done
 
@@ -240,7 +281,7 @@ for MISMATCHES in `seq 1 $((MAX_MISMATCHES+1))`; do
 echo $RUN_NAME $((MISMATCHES-1)) $MISMATCHES
 sbatch -J ${RUN_NAME}.inspect_barcodes.mis${MISMATCHES} \
 -o ${ROOT_OUTPUT_DIR}/logs/${RUN_NAME}.inspect_barcodes.mis${MISMATCHES}.log \
--c 1 --mem 80000 -p shortq --time 06:00:00 \
+-c 1 --mem 120000 -p shortq --time 06:00:00 \
 --wrap "python -u ${ROOT_OUTPUT_DIR}/src/scirnaseq.inspect_barcodes.py \
 --min-mismatches $((MISMATCHES-1)) --max-mismatches $MISMATCHES \
 --barcodes round1,round2 \

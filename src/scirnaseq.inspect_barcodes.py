@@ -20,6 +20,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 from glob import glob
+import scipy
 
 
 pd.set_option("date_dayfirst", True)
@@ -86,9 +87,9 @@ def get_cli_arguments():
         default=default,
         type=int)
     # args = parser.parse_args("-a metadata/sciRNA-seq.oligos_2018-11-14.csv -b round1,round2 --max-mismatches 0 -".split(" "))
-    # args = parser.parse_args("-a metadata/sciRNA-seq.SCI016.oligos_2019-01-22.csv -b round1,round2 --max-mismatches 0 sci-RNA-seq_SCI016_Tn5-minus_RP_1uL".split(" "))
+    args = parser.parse_args("-a metadata/sciRNA-seq.SCI017.oligos_2019-02-11.csv -b round1,round2 --max-mismatches 0 sci-RNA-seq_SCI017_SSIV_6K".split(" "))
     print("# " + time.asctime() + " - Parsing command line arguments:")
-    args = parser.parse_args()
+    # args = parser.parse_args()
     args.cell_barcodes = args.cell_barcodes.split(",")
     print(args)
     return args
@@ -100,6 +101,7 @@ def main():
     args = get_cli_arguments()
 
     annotation = pd.read_csv(args.annotation)
+    bc_10x = "/home/arendeiro/workspace/cellranger-atac-1.0.0/cellranger-atac-cs/1.0.0/lib/python/barcodes/737K-cratac-v1.txt"
 
     # # get barcodes with well information
     barcodes_with_well = list()
@@ -118,6 +120,9 @@ def main():
         umi_count_file = os.path.join("barcodes", output_prefix + "barcode_gene_umi_count.clean.csv")
         umi_dup_file = os.path.join("barcodes", output_prefix + "barcode_umi_dups.count.csv")
         cell_dup_file = os.path.join("barcodes", output_prefix + "barcode_umi_dups.per_cell.csv")
+        mapping_cell_rate_file = os.path.join("barcodes", output_prefix + "mapping_rate.per_cell.csv")
+        mapping_well_rate_file = os.path.join("barcodes", output_prefix + "mapping_rate.per_well.csv")
+        cell_metrics_file = os.path.join("barcodes", output_prefix + "all_metrics.per_cell.csv")
         if not os.path.exists(hdf_file):
             print("# " + time.asctime() + " - Concatenating barcode files into HDF file.")
             pieces = glob(os.path.join("barcodes", "{}.part_*.barcodes.*_*.mis_{}.csv.gz".format(
@@ -148,9 +153,7 @@ def main():
             print("# " + time.asctime() + " - Concatenating transcriptome files.")
             transcriptome = pd.DataFrame()
             pieces = sorted_nicely(
-                # sci-RNA-seq_SCI011_gate_more_3_BSF_0513_Jurkat_3T3.STAR.htseq-count.read_gene.part_1.csv
-                glob(os.path.join("star", "{}.STAR.htseq-count.read_gene.part_*.csv".format(args.run_name))))
-            # glob(os.path.join("star", "{}_STAR_*_part.Aligned.htseq-count.read_gene.csv".format(args.run_name))))
+                glob(os.path.join("star", "{}.STAR.htseq-count_gene.read_gene.part_*.csv".format(args.run_name))))
             for piece in pieces:
                 print(piece)
                 t = pd.read_csv(piece, header=None, names=['read', 'gene'])
@@ -171,7 +174,6 @@ def main():
             mapping_rate = 1 - (unmapped / all_reads)
 
             cell_rates = pd.DataFrame([all_reads, unmapped, mapping_rate], index=['all_reads', 'unmapped', 'mapping_rate']).T
-            mapping_cell_rate_file = os.path.join("barcodes", output_prefix + "mapping_rate.per_cell.csv")
             cell_rates.to_csv(mapping_cell_rate_file)
 
             # # per well
@@ -189,7 +191,6 @@ def main():
             mapping_rate = 1 - (unmapped / all_reads)
 
             well_rates = pd.DataFrame([all_reads, unmapped, mapping_rate], index=['all_reads', 'unmapped', 'mapping_rate']).T
-            mapping_well_rate_file = os.path.join("barcodes", output_prefix + "mapping_rate.per_well.csv")
             well_rates.to_csv(mapping_well_rate_file)
 
             # remove unmapped reads
@@ -199,12 +200,14 @@ def main():
 
             print("# " + time.asctime() + " - Investigating duplicates.")
             duplicates_per_molecule = df2.groupby(args.cell_barcodes)['umi'].value_counts()
+            duplicates_per_molecule.columns = args.cell_barcodes + ['umi', 'count']
             duplicates_per_molecule.to_csv(umi_dup_file)
 
             fig, axis = plt.subplots(1, 2, figsize=(2 * 3, 3), tight_layout=True)
             sns.distplot(duplicates_per_molecule['count'], ax=axis[0], kde=False)
             axis[0].set_xlabel("Reads per UMI")
-            axis[0].set_ylabel("UMIs")
+            axis[0].set_ylabel("UMIs (log)")
+            axis[0].set_yscale("log")
             sns.distplot(np.log10(duplicates_per_molecule['count']), ax=axis[1], kde=False)
             axis[1].set_xlabel("Reads per UMI (log)")
             axis[1].set_ylabel("UMIs (log)")
@@ -238,47 +241,168 @@ def main():
                 umi_count_file,
                 index=True, header=True)
 
+            # duplicates_per_molecule = pd.read_csv(umi_dup_file, index_col=[0, 1])
+            # duplicates_per_cell = pd.read_csv(cell_dup_file, index_col=[0, 1])
+            # cell_rates = pd.read_csv(mapping_cell_rate_file, index_col=[0, 1])
+            # df3 = pd.read_csv(umi_count_file)
+
             umis_per_cell = df3.reset_index().groupby(args.cell_barcodes)['umi'].sum()
             genes_per_cell = df3.reset_index().groupby(args.cell_barcodes)['gene'].nunique()
 
             # plot again all metrics, including per-cell duplicate rate
-            p = cell_rates.join(duplicates_per_cell[['unique_rate']]).join(umis_per_cell).join(genes_per_cell)
-            p = p.dropna()
-            fig, axis = plt.subplots(1, 6, figsize=(6 * 3, 3), tight_layout=True)
-            sns.distplot(np.log10(p['all_reads']), ax=axis[0], kde=False)
-            axis[0].set_xlabel("Reads per cell (log10)")
-            axis[0].set_yscale("log")
-            axis[0].set_ylabel("Cells")
-            axis[1].scatter(
-                p['all_reads'].head(int(8 * 50e4)), p['mapping_rate'].head(int(8 * 50e4)),
-                alpha=0.2, s=1, rasterized=True)
-            axis[1].set_xlabel("Reads per cell")
-            axis[1].set_ylabel("Mapping rate")
-            axis[1].set_xscale("log")
-            axis[2].scatter(
-                p['all_reads'].head(int(8 * 50e4)), p['umi'].head(int(8 * 50e4)),
-                alpha=0.2, s=1, rasterized=True)
-            axis[2].set_xlabel("Reads per cell")
-            axis[2].set_ylabel("UMIs per cell")
-            axis[2].set_xscale("log")
-            axis[3].scatter(
+            d = pd.concat([umis_per_cell, genes_per_cell, duplicates_per_cell.loc[:, 'unique_rate']], ignore_index=True, axis=1)
+            p = pd.concat([cell_rates.loc[d.index, :].dropna(), d], ignore_index=True, axis=1)
+            p.columns = cell_rates.columns.tolist() + ['umi', 'gene', 'unique_rate']
+            p.to_csv(cell_metrics_file)
+
+            fig, axis = plt.subplots(2, 3, figsize=(3 * 3, 3 * 2), tight_layout=True)
+
+            sns.distplot(p['mapping_rate'], ax=axis[0, 0], kde=False)
+            axis[0, 0].set_xlabel("Mapping rate")
+            axis[0, 0].set_ylabel("Barcodes")
+            axis[0, 0].set_yscale("log")
+
+            axis[1, 0].scatter(
                 p['all_reads'].head(int(8 * 50e4)), p['gene'].head(int(8 * 50e4)),
                 alpha=0.2, s=1, rasterized=True)
-            axis[3].set_xlabel("Reads per cell")
-            axis[3].set_ylabel("Genes per cell")
-            axis[3].set_xscale("log")
-            axis[4].scatter(
+            axis[1, 0].set_xlabel("Reads per barcode")
+            axis[1, 0].set_ylabel("Genes per barcode")
+            axis[1, 0].set_xscale("log")
+            axis[1, 0].set_yscale("log")
+
+            axis[0, 1].scatter(
+                p['all_reads'].head(int(8 * 50e4)), p['mapping_rate'].head(int(8 * 50e4)),
+                alpha=0.2, s=1, rasterized=True)
+            axis[0, 1].set_xlabel("Reads per barcode")
+            axis[0, 1].set_ylabel("Mapping rate")
+            axis[0, 1].set_xscale("log")
+
+            axis[0, 2].scatter(
+                p['all_reads'].head(int(8 * 50e4)), p['unique_rate'].head(int(8 * 50e4)),
+                alpha=0.2, s=1, rasterized=True)
+            axis[0, 2].set_xscale("log")
+            axis[0, 2].set_xlabel("Reads per barcode")
+            axis[0, 2].set_ylabel("Unique rate")
+
+            sns.distplot(np.log10(p['all_reads']), ax=axis[1, 1], kde=False)
+            axis[1, 1].set_xlabel("Reads per barcode (log10)")
+            axis[1, 1].set_yscale("log")
+            axis[1, 1].set_ylabel("Barcodes")
+
+            axis[1, 2].scatter(
                 p['mapping_rate'].head(int(8 * 50e4)), p['unique_rate'].head(int(8 * 50e4)),
                 alpha=0.2, s=1, rasterized=True)
-            axis[4].set_xlabel("Mapping rate")
-            axis[4].set_ylabel("Unique rate")
-            sns.distplot(p['mapping_rate'], ax=axis[5], kde=False)
-            axis[5].set_xlabel("Mapping rate")
-            axis[5].set_yscale("log")
-            axis[5].set_ylabel("Cells")
+            axis[1, 2].set_xlabel("Mapping rate")
+            axis[1, 2].set_ylabel("Unique rate")
+
             reads_vs_mapping_rate_plot = os.path.join(
                 "results", output_prefix + "reads_vs_mapping_rate_vs_duplication.per_cell.scatter.res.svg")
             fig.savefig(reads_vs_mapping_rate_plot, dpi=300, bbox_inches="tight")
+
+            # Pairwise plots
+
+            # # add type of material
+            bc_annot = annotation.set_index("barcode_sequence").loc[:, "material"]
+            bc_annot.index.name = "round2"
+            p_annot = p.join(bc_annot, on="round1")
+
+            # add species ratio and assigned species
+            df3.loc[:, "human"] = df3.loc[:, "gene"].startswith("ENSG")
+
+            sp_count = df3.groupby(args.cell_barcodes + ['human'])['umi'].sum()
+            sp_ratio = sp_count.reset_index().groupby(args.cell_barcodes).apply(
+                lambda x: x[x['human'] == True]['umi'] / x['umi'].sum())
+            # sp_ratio = pd.read_csv("TMP.sp_ratio.csv")
+            sp_ratio.loc[:, "species"] = np.nan
+            sp_ratio.loc[sp_ratio > 0.75, "species"] = "human"
+            sp_ratio.loc[sp_ratio > 0.25, "species"] = "mouse"
+            sp_ratio.loc[:, "species"] = sp_ratio.loc[:, "species"].fillna("doublet")
+
+            p2 = p_annot.loc[p_annot['umi'].nlargest(5000).index]
+            g = sns.pairplot(p2, hue="material", plot_kws={"linewidth": 0, "edgecolors": "none", "rasterized": True, "alpha": 0.2})
+            cell_unique_rate_plot = os.path.join(
+                "results", output_prefix + "cell_umi_dups.per_cell.top_cells.pairplot.svg")
+            g.fig.savefig(cell_unique_rate_plot, dpi=300, bbox_inches="tight")
+
+            p2 = p_annot.loc[p_annot['umi'].nlargest(5000).index]
+            p2.loc[:, ~p2.columns.str.contains("_rate|material")] = np.log10(p2.loc[:, ~p2.columns.str.contains("_rate|material")] + 1)
+            g = sns.pairplot(p2, hue="material", plot_kws={"linewidth": 0, "edgecolors": "none", "rasterized": True, "alpha": 0.2})
+            cell_unique_rate_plot = os.path.join(
+                "results", output_prefix + "cell_umi_dups.per_cell.top_cells.log.pairplot.svg")
+            g.fig.savefig(cell_unique_rate_plot, dpi=300, bbox_inches="tight")
+
+            p2 = p_annot.loc[p_annot['umi'].nsmallest(5000).index]
+            g = sns.pairplot(p2, hue="material", plot_kws={"linewidth": 0, "edgecolors": "none", "rasterized": True, "alpha": 0.2})
+            cell_unique_rate_plot = os.path.join(
+                "results", output_prefix + "cell_umi_dups.per_cell.bottom_cells.pairplot.svg")
+            g.fig.savefig(cell_unique_rate_plot, dpi=300, bbox_inches="tight")
+
+            p2 = p_annot.loc[p_annot['umi'].nsmallest(5000).index]
+            p2.loc[:, ~p2.columns.str.contains("_rate|material")] = np.log10(p2.loc[:, ~p2.columns.str.contains("_rate|material")] + 1)
+            g = sns.pairplot(p2, hue="material", plot_kws={"linewidth": 0, "edgecolors": "none", "rasterized": True, "alpha": 0.2})
+            cell_unique_rate_plot = os.path.join(
+                "results", output_prefix + "cell_umi_dups.per_cell.bottom_cells.log.pairplot.svg")
+            g.fig.savefig(cell_unique_rate_plot, dpi=300, bbox_inches="tight")
+
+            # Efficiency plot
+            # # add 10X barcodes
+            from Bio.Seq import Seq
+            bc = pd.read_csv(bc_10x, header=None, squeeze=True)
+
+            p = pd.read_csv(cell_metrics_file, index_col=[0, 1])
+            p.loc[:, "round2_rc"] = [str(Seq(x).reverse_complement()) for x in p.index.get_level_values("round2")]
+            p.loc[:, "round2_in_10X"] = p["round2_rc"].isin(bc.tolist())
+            print("Fraction of correct round2 barcodes: {}".format(p["round2_in_10X"].sum() / float(p.shape[0])))
+
+            # # count transcriptome reads per cell
+            # from sklearn.linear_model import LinearRegression
+            sns.set_style("ticks")
+
+            def f(x, m, b):
+                return m * x + b
+
+            p2 = p.loc[p['umi'].nlargest(100000).index]
+
+            fig, axis = plt.subplots(2, 2, figsize=(2 * 3, 2 * 3), tight_layout=True)
+            fig.suptitle("Experiment efficiency:\n" + args.run_name, ha="center")
+
+            for j, var in enumerate(["umi", "gene"]):
+                for i, l in [(0, ""), (1, " (log)")]:
+                    (m, b), pcov = scipy.optimize.curve_fit(f, p2['all_reads'], p2[var])
+                    # lm = LinearRegression().fit(p2['all_reads'].values.reshape(-1, 1), p2[var])
+                    # assert np.allclose(m, lm.coef_)
+                    # assert np.allclose(b, lm.intercept_)
+                    axis[i, j].text(0.5e5, 5000, s="y = {:.6f}x + {:.2f}".format(m, b), ha="center")
+
+                    axis[i, j].set_xlabel("Total reads sequenced per cell" + l)
+                    axis[i, j].set_ylabel("Useful {}s per cell".format(var.capitalize()) + l)
+                    axis[i, j].scatter(p2['all_reads'], p2[var], alpha=0.2, s=2, edgecolors="none", rasterized=True)
+                    x = np.linspace(p2['all_reads'].min(), p2['all_reads'].max(), num=1000)
+                    axis[i, j].plot(x, f(x, m, b), color="orange")
+                    y = f(1e4, m, b)
+                    axis[i, j].text(1e4, y, s="{}s recovered\nwith 10.000\nreads sequenced:\n{:.2f}"
+                                              .format(var.capitalize(), y), ha="left")
+                    # X == Y
+                    xmax = p2['all_reads'].max()
+                    xmax += xmax * 0.1
+                    ymax = p2[var].max()
+                    ymax += ymax * 0.1
+                    x = np.linspace(0, ymax, num=2)
+                    y = f(x, 1, 0)
+                    axis[i, j].plot(x, y, linestyle="--", color="black", linewidth=0.5)
+
+                    # Axlines
+                    for h in [100, 250, 500, 1000, 5000]:
+                        axis[i, j].axhline(h, linestyle="--", color="black", linewidth=0.5)
+                    for v in [10000, 100000]:
+                        axis[i, j].axvline(v, linestyle="--", color="black", linewidth=0.5)
+
+                    axis[i, j].ticklabel_format(useOffset=False, style="plain")
+                    if i == 1:
+                        axis[i, j].loglog()
+            performance_plot = os.path.join(
+                "results", output_prefix + "performance_plot.only_10x_correct.svg")
+            fig.savefig(performance_plot, dpi=300, bbox_inches="tight")
 
         else:
             print("# " + time.asctime() + " - HDF file exists. Reading up '{}'".format(umi_count_file))
@@ -346,15 +470,19 @@ def main():
         # Plot barcode distribution
         print("# " + time.asctime() + " - Investigating barcode distributions.")
         fig, axis = plt.subplots(2, 2, figsize=(2 * 4, 2 * 4))
-        fig.suptitle(args.run_name)
-        axis[0, 0].plot(umis_per_cell.rank(ascending=False), umis_per_cell, linestyle='-')
-        axis[0, 1].plot(umis_per_cell.head(1000).rank(ascending=False), umis_per_cell.head(1000), linestyle='-')
-        axis[1, 0].plot(umis_per_cell.rank(ascending=False), umis_per_cell, linestyle='-')
+        # fig.suptitle(args.run_name)
+        # axis[0, 0].plot(umis_per_cell2.rank(ascending=False), umis_per_cell2, linestyle='-')
+        axis[0, 0].plot(umis_per_cell.rank(ascending=False), umis_per_cell, linestyle='-', color="orange")
+        # axis[0, 1].plot(umis_per_cell2.head(5000).rank(ascending=False), umis_per_cell2.head(5000), linestyle='-')
+        axis[0, 1].plot(umis_per_cell.head(5000).rank(ascending=False), umis_per_cell.head(5000), linestyle='-', color="orange")
+        # axis[1, 0].plot(umis_per_cell2.rank(ascending=False), umis_per_cell2, linestyle='-')
+        axis[1, 0].plot(umis_per_cell.rank(ascending=False), umis_per_cell, linestyle='-', color="orange")
         axis[1, 0].set_yscale('log')
-        axis[1, 1].plot(umis_per_cell.head(1000).rank(ascending=False), umis_per_cell.head(1000), linestyle='-')
+        # axis[1, 1].plot(umis_per_cell2.head(5000).rank(ascending=False), umis_per_cell2.head(5000), linestyle='-')
+        axis[1, 1].plot(umis_per_cell.head(5000).rank(ascending=False), umis_per_cell.head(5000), linestyle='-', color="orange")
         axis[1, 1].set_yscale('log')
         for ax in axis.flatten():
-            ax.axvline(1000, linestyle="--", color="black", alpha=0.5)
+            ax.axvline(5000, linestyle="--", color="black", alpha=0.5)
             ax.set_xlabel("Cells")
             ax.set_ylabel("UMIs")
         sns.despine(fig)
@@ -372,6 +500,8 @@ def main():
         # Species mixing experiment
         species_count = pd.pivot_table(
             df3, index=args.cell_barcodes, columns="species", values="umi", aggfunc=sum, fill_value=0)
+
+        species_count = species_count.join(p.set_index(args.cell_barcodes).loc[:, "round2_in_10X"])
 
         s = pd.DataFrame()
         for min_umi in [1, 2, 5, 10, 20, 30, 40, 50, 100, 500, 1000, 2500, 5000, 10000]:
@@ -412,16 +542,24 @@ def main():
             ax.axvline(0, linestyle="--", color="black", alpha=0.1, zorder=100)
         m = max(species_count.loc[:, "mouse"].max(), species_count.loc[:, "human"].max())
         axis[0].plot((0, m), (0, m), linestyle="--", alpha=0.5, color="black")
-        axis[0].scatter(
-            species_count.loc[:, "mouse"],
-            species_count.loc[:, "human"], s=2, alpha=0.2, rasterized=True)
+
+        for bool_, color in zip([True], ["orange"]):
+            axis[0].scatter(
+                species_count.loc[species_count['round2_in_10X'] == bool_, "mouse"],
+                species_count.loc[species_count['round2_in_10X'] == bool_, "human"],
+                s=2, alpha=0.2, rasterized=True, label=bool_)
+        axis[0].legend()
         axis[0].set_xlim((0, m))
         axis[0].set_ylim((0, m))
         a = np.log2(1 + species_count.loc[:, "mouse"])
         b = np.log2(1 + species_count.loc[:, "human"])
         m = max(a.max(), b.max())
         axis[1].plot((0, m), (0, m), linestyle="--", alpha=0.5, color="black")
-        axis[1].scatter(a, b, s=2, alpha=0.2, rasterized=True)
+        for bool_, color in zip([True], ["orange"]):
+            a = np.log2(1 + species_count.loc[species_count['round2_in_10X'] == bool_, "mouse"])
+            b = np.log2(1 + species_count.loc[species_count['round2_in_10X'] == bool_, "human"])
+            axis[1].scatter(a, b, s=2, alpha=0.2, rasterized=True, label=bool_)
+        axis[1].legend()
         axis[1].set_xlim((0, m))
         axis[1].set_ylim((0, m))
         axis[0].set_xlabel("Mouse (UMIs)")

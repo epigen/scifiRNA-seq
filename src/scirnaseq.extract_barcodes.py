@@ -6,10 +6,11 @@ sciRNA-seq barcode extraction and correction script.
 
 import sys
 from argparse import ArgumentParser
-import numpy as np
 import pandas as pd
 import pysam
 import time
+import bisect
+
 
 __author__ = "Andre Rendeiro"
 __copyright__ = "Copyright 2018, Andre Rendeiro"
@@ -195,6 +196,16 @@ def arg_parser(parser):
              "Default is '{}'".format(",".join(default)),
         default=",".join(default),
         type=str)
+    choices = ['exact', 'bisect']
+    parser.add_argument(
+        "--correction-mode",
+        dest="correction_mode",
+        help="Mode to correct barcodes against reference. " +
+             "One of {}. ".format(" or ".join(choices)) +
+             "The exact mode is exact but can be slow and the bisect mode is fast but can be wrong. " +
+             "Default is '{}'".format(choices[1]),
+        default=choices[1],
+        type=str)
 
     return parser
 
@@ -243,9 +254,17 @@ def extract_barcodes(
     return pd.DataFrame(data=cells, columns=["read"] + barcodes)
 
 
-def annotate_barcodes(cells, annotation, barcodes=["round1", "round2"]):
+def annotate_barcodes(
+        cells, annotation,
+        barcodes=["round1", "round2"],
+        correction_mode="bisect"):
+
     def count_mismatches(a, b):
         return sum(a != b for a, b in zip(a, b))
+
+    def reverse_complement(seq):
+        from Bio.Seq import Seq
+        return str(Seq(seq).reverse_complement())
 
     # fraction mapping to annotation
     print("# " + time.asctime() + " - Starting to annotate barcodes.")
@@ -258,22 +277,66 @@ def annotate_barcodes(cells, annotation, barcodes=["round1", "round2"]):
         cells.loc[:, barcode + '_contains_N'] = cells[barcode].str.contains("N").astype(int)
 
     print("# " + time.asctime() + " - Starting to correct barcodes.")
-    for barcode in barcodes[::-1]:
+    for barcode in barcodes:
         print("## " + time.asctime() + " - " + barcode)
+
+        # prepare reference and query
         ref = annotation.loc[annotation["barcode_type"] == barcode, "barcode_sequence"]
         print(" - Creating query")
         query = cells.loc[
             (cells[barcode + "_correct"] == 0) & (cells[barcode + "_contains_N"] == 0),
             barcode].drop_duplicates()
+
         print(" - Finding mismatches against reference")
-        mis = pd.DataFrame([
-            (q, count_mismatches(q, b), b)
-            for b in ref
-            for q in query], columns=[barcode, barcode + "_mismatches", barcode + '_closest'])
-        print(" - " + time.asctime() + " -  Finding minimal match.")
-        fix = mis.loc[mis.groupby(barcode)[barcode + "_mismatches"].idxmin()]
-        print(" - " + time.asctime() + " -  Merging correct to reference.")
-        cells = cells.set_index(barcode).join(fix.set_index(barcode)).reset_index()
+        if correction_mode == "exact":
+            # for every query sequence, get number of mismatches to each reference
+            mis = pd.DataFrame([
+                (q, count_mismatches(q, b), b)
+                for b in ref
+                for q in query], columns=[barcode, barcode + "_mismatches", barcode + '_closest'])
+            # find minimal match
+            print(" - " + time.asctime() + " -  Finding minimal match.")
+            fix = mis.loc[mis.groupby(barcode)[barcode + "_mismatches"].idxmin()]
+            # join to the annotation
+            print(" - " + time.asctime() + " -  Merging correct to reference.")
+            cells = cells.set_index(barcode).join(fix.set_index(barcode)).reset_index()
+
+        elif correction_mode == "bisect":
+            # the strategy here is to use a sorted, indexed reference to query the nearest barcode
+            # then, take the nearest N in both directions
+            # and use exact method on those to get matches with N mismatches
+            ref = ref.sort_values().reset_index(drop=True)
+            query = query.sort_values().reset_index(drop=True)
+            i = bisect.bisect_left(ref, query[0])
+
+            mis = pd.DataFrame([
+                (q, count_mismatches(q, b), b)
+                for b in ref.loc[i - 10: i + 10]
+                for q in query], columns=[barcode, barcode + "_mismatches", barcode + '_closest'])
+
+        elif correction_mode == "graph":
+            import khmer
+            import os
+
+            graph_file = os.path.join()
+            if not os.path.exists(graph_file):
+                # create graph
+                graph = khmer.Nodegraph(ksize, tablesize, args.n_tables)
+                # consume and increment nodes/edges? with data
+                graph = [graph.consume(seq) for seq in ref]
+                # save graph
+                graph.save(graph_file)
+            else:
+                graph = khmer.read(graph_file)
+
+            # calculate collisions
+            fp_rate = khmer.calc_expected_collisions(graph, args.force, max_false_pos=.15)
+
+            # now score/correct all barcodes
+            aligner = khmer.ReadAligner(graph, trusted_cov, bits_theta)
+            for read in query:
+                score, graph_align, read_align, is_truncated = aligner.align(read)
+                corrected_read = graph_align
 
         # have all entries with same type (no NAs)
         cells[barcode + "_mismatches"] = cells[barcode + "_mismatches"].fillna(0)
