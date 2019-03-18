@@ -1,4 +1,3 @@
-
 # Edit these parameters
 RUN_NAMES=(
 sci-RNA-seq_SCI017_SSIV_6K
