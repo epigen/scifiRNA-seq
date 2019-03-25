@@ -19,4 +19,5 @@ sci-RNA-seq_SCI013_12-nuclei_various-rtprimers,0,,sci-RNA-seq,single-cell,SCI013
 sci-RNA-seq_SCI016_Tn5-minus_RP_1uL,0,,sci-RNA-seq,single-cell,SCI016,Jurkat_3T3,,,,cells_and_nuclei,,,,10X,,,0,1,FALSE,human_mouse,BSF_0565_H5TWWBGX9,1,SCI_016_Tn5_minus_15_01_19_1ul_primer_S48435,bsf,,,,,,
 sci-RNA-seq_SCI016_Tn5-minus_RP_4uL,0,,sci-RNA-seq,single-cell,SCI016,Jurkat_3T3,,,,cells_and_nuclei,,,,10X,,,0,4,FALSE,human_mouse,BSF_0565_H5TWWBGX9,1,SCI_016_Tn5_minus_17_01_19_4ul_primer_S48436,bsf,,,,,,
 sci-RNA-seq_SCI016_Tn5-plus,0,,sci-RNA-seq,single-cell,SCI016,Jurkat_3T3,,,,cells_and_nuclei,,,,10X,,,0,0,TRUE,human_mouse,BSF_0565_H5TWWBGX9,1,SCI_016_Tn5_plus_15_01_19_S48437,bsf,,,,,,
-sci-RNA-seq_SCI017_SSIV_6K,1,,sci-RNA-seq,single-cell,SCI017,Jurkat_3T3,,,,cells_and_nuclei,,,,10X,,,0,,FALSE,human_mouse,BSF_0572_HGJC5BGX9,1,SCI017_SSIV_6K_S49236,bsf,,,,,,
+sci-RNA-seq_SCI017_SSIV_6K,0,,sci-RNA-seq,single-cell,SCI017,Jurkat_3T3,,,,cells_and_nuclei,,,,10X,,,0,,FALSE,human_mouse,BSF_0572_HGJC5BGX9,1,SCI017_SSIV_6K_S49236,bsf,,,,,,
+sci-RNA-seq_SCI019,1,,sci-RNA-seq,single-cell,SCI019,Jurkat_3T3,,,,cells_and_nuclei,5,,,10X,,,0,,TRUE,human_mouse,BSF_0585_000000000-G2YK7,1,SCI019_S50327,bsf,,,,,,
