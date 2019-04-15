@@ -21,23 +21,29 @@ def main():
     global n_round1_barcodes
 
     # barcode annotations
-    annotation_file = os.path.join("metadata", "sciRNA-seq.SCI017.oligos_2019-02-11.csv")
+    annotation_file = os.path.join("metadata", "sciRNA-seq.SCI022.oligos_2019-04-14.csv")
     annotation = pd.read_csv(annotation_file)
+    annotation.loc[:, "sample_type"] = pd.np.nan
+    annotation.loc[annotation['sample'].str.startswith("PBMC"), "sample_type"] = "PBMC"
+    annotation.loc[annotation['sample'].str.startswith("Tcell"), "sample_type"] = "TCell"
+    annotation.loc[annotation['sample'].str.startswith("3T3"), "sample_type"] = "Mixture"
 
     droplet_barcode_file = os.path.join("metadata", "737K-cratac-v1.reverse_complement.csv")
     droplets = pd.read_csv(droplet_barcode_file)
 
     # sample annotations
 
-    sample_name = "sci-RNA-seq_SCI020_3uL_reseq_4K"
+    sample_name = "SCI022_TCell"
+    n_lanes = 2
     n_parts = 4
-    n_round1_barcodes = 96
-    round2_barcodes = "reverse_complement"
-    expected_cell_number = 4000
+    n_round1_barcodes = 384
+    round2_barcodes = "original"
+    expected_cell_number = 125000
 
-    sample_name = "sci-RNA-seq_SCI021_125K"
-    n_parts = 2
-    n_round1_barcodes = 96
+    sample_name = "SCI022_PBMC"
+    n_lanes = 2
+    n_parts = 4
+    n_round1_barcodes = 384
     round2_barcodes = "original"
     expected_cell_number = 125000
 
@@ -48,38 +54,42 @@ def main():
     output_prefix = os.path.join(results_dir, f"{sample_name}.")
 
     # read text files
-    df = load_data(sample_name, n_parts=n_parts)
+    df = load_data(sample_name, n_lanes=n_lanes, n_parts=n_parts)
+
     print(f"# {time.asctime()} - Writing data to pickle.")
-    pickle.dump(df, open(input_prefix + "all.pickle", 'wb'), protocol=-1)
+    # pickle.dump(df, open(input_prefix + "all.pickle", 'wb'), protocol=-1)
     # df = pickle.load(open(input_prefix + "all.pickle", 'rb'))
 
     # Gather metrics per cell
-    r1_annotation = annotation.set_index("barcode_sequence")['material']
+    r1_annotation = annotation.set_index("barcode_sequence")['sample_type']
+    r1_annotation.index.name = "r1"
     metrics = gather_stats_per_cell(df, r1_annotation=r1_annotation)
 
     # # Plot
     # # # Loglog line plot of rank vs abundance
-    t = int(expected_cell_number * 50)
+    t = int(expected_cell_number * 10)
     plot_metrics_lineplot(metrics, tail=t)
-    plot_metrics_lineplot(metrics, tail=t, by_group="material")
+    plot_metrics_lineplot(metrics, tail=None, by_group="sample_type")
     # # # Histogram
     t = int(expected_cell_number * 10)
-    plot_metrics_distplot(metrics.tail(t))
-    plot_metrics_distplot(metrics.tail(t), by_group="material")
+    plot_metrics_distplot(metrics, tail=t)
 
     # # # Efficiency plot (UMI and gene yield in relation to reads per cell)
     t = int(expected_cell_number * 5)
     plot_efficiency(metrics, tail=t)
+    plot_efficiency(metrics, tail=t, by_group="sample_type")
     plot_efficiency(metrics, tail=t, colour_by="unique_fraction")
-    plot_efficiency(metrics, tail=t, by_group="material")
-    plot_efficiency(metrics, tail=t, by_group="material", colour_by="unique_fraction")
 
     # # # Species mixing - only for twice the number of expected cells
-    plot_species_mixing(metrics.tail(int(expected_cell_number * 1.5)), norm=False)
-    plot_species_mixing(metrics.tail(int(expected_cell_number * 1.5)), norm=True)
+    t = int(expected_cell_number * 1.5)
+    plot_species_mixing(metrics, tail=t, norm=False)
+    plot_species_mixing(metrics, tail=t, norm=False, by_group="sample_type")
+    # plot_species_mixing(metrics, tail=t, norm=True)
+    # plot_species_mixing(metrics, tail=t, norm=True, by_group="sample_type")
 
     # Well and droplet inspection
     well_metrics = gather_stats_per_well(metrics, seq_content=True)
+    well_metrics.to_csv(output_prefix + "well_metrics.csv.gz")
     plot_well_stats(well_metrics, tail=None, suffix="")
 
     #
@@ -93,26 +103,29 @@ def main():
 
     t = expected_cell_number * 10
     plot_metrics_lineplot(metrics_filtered, tail=t, suffix="exact_match")
-    plot_metrics_lineplot(metrics_filtered, tail=t, suffix="exact_match", by_group="material")
+    plot_metrics_lineplot(metrics_filtered, tail=None, suffix="exact_match", by_group="sample_type")
 
     t = expected_cell_number * 10
     plot_metrics_distplot(metrics_filtered, tail=t, suffix="exact_match")
-    plot_metrics_distplot(metrics_filtered, tail=t, suffix="exact_match", by_group="material")
+    plot_metrics_distplot(metrics_filtered, tail=t, suffix="exact_match", by_group="sample_type")
 
     # # # Efficiency plot (UMI and gene yield in relation to reads per cell)
     t = expected_cell_number * 5
     plot_efficiency(metrics_filtered, tail=t, suffix="exact_match")
     plot_efficiency(metrics_filtered, tail=t, suffix="exact_match", colour_by="unique_fraction")
-    plot_efficiency(metrics_filtered, tail=t, suffix="exact_match", by_group="material")
-    plot_efficiency(metrics_filtered, tail=t, suffix="exact_match", by_group="material", colour_by="unique_fraction")
+    plot_efficiency(metrics_filtered, tail=t, suffix="exact_match", by_group="sample_type")
+
 
     # # # Species mixing - only for twice the number of expected cells
     t = int(expected_cell_number * 1.5)
     plot_species_mixing(metrics_filtered, tail=t, norm=False, suffix="exact_match")
-    plot_species_mixing(metrics_filtered, tail=t, norm=True, suffix="exact_match")
+    # plot_species_mixing(metrics_filtered, tail=t, norm=False, suffix="exact_match", by_group="sample_type")
+    # plot_species_mixing(metrics_filtered, tail=t, norm=True, suffix="exact_match")
+    # plot_species_mixing(metrics_filtered, tail=t, norm=True, suffix="exact_match", by_group="sample_type")
 
     # Well and droplet inspection
     well_metrics_filtered = gather_stats_per_well(metrics_filtered, seq_content=True, save_intermediate=True)
+    well_metrics_filtered.to_csv(output_prefix + "well_metrics_filtered.csv.gz")
     plot_well_stats(well_metrics_filtered, tail=None, suffix="exact_match")
 
     #
@@ -163,24 +176,11 @@ def main():
             dpi=300, bbox_inches="tight")
 
     # Plot species mixing compared to 10X only barcodes
-    c = metrics_filtered.query("total > 100").tail(int(2 * expected_cell_number))
-    d = metrics_r2_filtered.query("total > 100").tail(int(2 * expected_cell_number))
+    c = metrics_filtered.query("total > 100").tail(2 * expected_cell_number)
+    d = metrics_r2_filtered.query("total > 100").tail(2 * expected_cell_number)
+    plot_comparison_to_10x(c, d, suffix="_r2_only")
 
-    for var in ["sp_ratio", "sp_ratio_norm"]:
-        for sparse_label, s in [
-                ("", 2),
-                ("sparser", 0.05)
-        ]:
-            for cmap_label, cmap in [
-                    ("winter", "winter"),
-                    ("custom_grg", custom_cmap_grg()),
-                    ("custom_byg", custom_cmap_byg())
-            ]:
-                plot_comparison_to_10x(
-                    c, d,
-                    colour_by=var,
-                    suffix=f"_r2_only.0.2_{sparse_label}_{cmap_label}".replace("__", "_"),
-                    inner=0.2, plotting_kwargs={"cmap": cmap, "s": s})
+    #
 
     # Investigate cells per droplet
     # # # Count
@@ -231,22 +231,23 @@ def main():
         dpi=300, bbox_inches="tight")
 
 
-def load_data(sample_name, n_parts=2, **kwargs):
+def load_data(sample_name, n_lanes=2, n_parts=4, **kwargs):
     print(f"# {time.asctime()} - Reading files.")
-    parts = list()
-    for part in range(1, n_parts + 1):
-        print(f"# {time.asctime()} - Reading part {part}.")
-        input_file = os.path.join(f"data/{sample_name}/{sample_name}.{part}.STAR.filtered2.csv.gz")
+    pieces = list()
+    for lane in range(1, n_lanes + 1):
+        for part in range(1, n_parts + 1):
+            print(f"# {time.asctime()} - Reading lane {lane}, part {part}.")
+            input_file = os.path.join(f"data/{sample_name}/{sample_name}.{lane}.{part}.STAR.filtered2.csv.gz")
 
-        d = pd.read_csv(
-            input_file,
-            header=None, sep=',', error_bad_lines=False, engine='c',
-            names=['read', 'r1', 'r2', 'umi', 'gene', 'pos'], compression='gzip', **kwargs)
-        parts.append(d)
-        print(f"# {time.asctime()} - Done with part {part}. {d.shape[0]} lines.")
+            d = pd.read_csv(
+                input_file,
+                header=None, sep=',', error_bad_lines=False, engine='c',
+                names=['read', 'r1', 'r2', 'umi', 'gene', 'pos'], compression='gzip', **kwargs)
+            pieces.append(d)
+            print(f"# {time.asctime()} - Done with lane {lane}, part {part}. {d.shape[0]} lines.")
 
     print(f"# {time.asctime()} - Concatenating parts.")
-    return pd.concat(parts)
+    return pd.concat(pieces)
 
 
 def gather_stats_per_cell(
@@ -339,13 +340,6 @@ def gather_stats_per_cell(
     if not norm_species:
         return metrics
 
-    # Assess species bias
-    r = dict()
-    for f in [0.1, 0.2, 0.25, 0.5, 0.75] + list(range(1, 1000, 10)) + [1.5]:
-        t = metrics.tail(int(expected_cell_number * f))
-        r[expected_cell_number * f] = t['mouse'].mean() / t['human'].mean()
-    r = pd.Series(r).sort_index()
-
     # Add normalized metrics to stats
     metrics.loc[:, 'human_norm'] = metrics['human'] * r[int(expected_cell_number)]
     metrics.loc[:, 'total_norm'] = metrics[['mouse', 'human_norm']].sum(1)
@@ -357,7 +351,14 @@ def gather_stats_per_cell(
     if save_intermediate:
         to_pickle(metrics, "metrics" + suffix)
 
-    # Plot ammount of species-specific bias
+    # Assess species bias
+    r = dict()
+    for f in [0.1, 0.2, 0.25, 0.5, 0.75] + list(range(1, 1000, 10)) + [1.5]:
+        t = metrics.tail(int(expected_cell_number * f))
+        r[expected_cell_number * f] = t['mouse'].mean() / t['human'].mean()
+    r = pd.Series(r).sort_index()
+
+    # # plot ammount of species-specific bias
     n = 1
     fig, axis = plt.subplots(n, 1, figsize=(3, n * 3), tight_layout=True)
     axis.plot(r.index, r, "o-")
@@ -375,9 +376,15 @@ def gather_stats_per_cell(
 
     for label in ["", ".log"]:
         fig, axis = plt.subplots(2, 2, figsize=(2 * 3, 2 * 3), tight_layout=True)
-        kwargs = {"s": 0.1, "alpha": 0.2, "rasterized": True, "cmap": custom_cmap_brb()}
-        axis[0, 0].scatter(metrics2['mouse'], metrics2['human'], c=metrics2['sp_ratio'], **kwargs)
-        axis[0, 1].scatter(metrics2['mouse'], metrics2['human'], c=metrics2['sp_ratio_norm'], **kwargs)
+        kwargs = {"s": 0.1, "alpha": 0.2, "rasterized": True, "cmap": get_custom_cmap()}
+        axis[0, 0].scatter(
+            metrics2['mouse'],
+            metrics2['human'],
+            c=metrics2['sp_ratio'], **kwargs)
+        axis[0, 1].scatter(
+            metrics2['mouse'],
+            metrics2['human'],
+            c=metrics2['sp_ratio_norm'], **kwargs)
         v = metrics2[['mouse', 'human']].quantile(.999).max()
         v += v * 0.1
         for ax in axis[0, :]:
@@ -390,8 +397,14 @@ def gather_stats_per_cell(
             ax.plot((0, v), (0, v * (1 / r[int(expected_cell_number)])), linestyle="--", color="orange")
             ax.set_ylabel("Human (UMIs)")
 
-        axis[1, 0].scatter(metrics2['mouse'], metrics2['human_norm'], c=metrics2['sp_ratio'], **kwargs)
-        axis[1, 1].scatter(metrics2['mouse'], metrics2['human_norm'], c=metrics2['sp_ratio_norm'], **kwargs)
+        axis[1, 0].scatter(
+            metrics2['mouse'],
+            metrics2['human_norm'],
+            c=metrics2['sp_ratio'], **kwargs)
+        axis[1, 1].scatter(
+            metrics2['mouse'],
+            metrics2['human_norm'],
+            c=metrics2['sp_ratio_norm'], **kwargs)
         v = metrics2[['mouse', 'human_norm']].quantile(.999).max()
         v += v * 0.1
         for ax in axis[1, :]:
@@ -507,7 +520,7 @@ def gather_stats_per_cell_as_droplet(
 
     for label in ["", ".log"]:
         fig, axis = plt.subplots(1, 2, figsize=(2 * 3, 1 * 3), tight_layout=True, squeeze=False)
-        kwargs = {"s": 0.1, "alpha": 0.2, "rasterized": True, "cmap": custom_cmap_brb()}
+        kwargs = {"s": 0.1, "alpha": 0.2, "rasterized": True, "cmap": get_custom_cmap()}
         axis[0, 0].scatter(metrics2['mouse'], metrics2['human'], c=metrics2['sp_ratio'], **kwargs)
         # axis[0, 1].scatter(metrics2['mouse'], metrics2['human'], c=metrics2['sp_ratio_norm'], **kwargs)
         v = metrics2[['mouse', 'human']].quantile(.999).max()
@@ -551,6 +564,7 @@ def plot_metrics_lineplot(metrics, keys=['read', 'umi', 'gene'], tail=None, suff
     fig, axis = plt.subplots(n, 2, figsize=(2 * 6, n * 3), tight_layout=True)
     for i, metric in enumerate(keys):
         for group in groups:
+            print(metric, group)
             d = metrics.loc[metrics[by_group] == group, metric].sort_values()
             rank = d.rank(ascending=False, method="average")
             axis[i, 0].plot(rank, d, rasterized=True, label=group if group != "dummy" else None)
@@ -598,40 +612,6 @@ def plot_metrics_distplot(metrics, keys=['read', 'umi', 'gene'], tail=None, suff
             axis[i].legend()
     fig.savefig(
         output_prefix + f"metrics_per_cell.distplot.{suffix}.svg"
-        .replace("..", "."),
-        dpi=300, bbox_inches="tight")
-
-
-def plot_metrics_boxplot(metrics, keys=['read', 'umi', 'gene', 'unique_fraction'], tail=None, suffix="", by_group=None):
-    print(f"# {time.asctime()} - Plotting metrics per cell.")
-    if tail:
-        metrics = metrics.tail(tail)
-    n = len(keys)
-
-    if by_group is not None:
-        groups = metrics[by_group].dropna().unique()
-        suffix += f"by_{by_group}"
-    else:
-        by_group = "dummy"
-        groups = ["dummy"]
-        metrics.loc[:, by_group] = groups[0]
-
-    fig, axis = plt.subplots(
-        1, n, figsize=(n * 3, 1 * 3),
-        tight_layout=True, sharex="col", squeeze=True)
-    for i, metric in enumerate(keys):
-        axis[i].set_yscale("log")
-        for j, group in enumerate(groups):
-            d = metrics.loc[metrics[by_group] == group, :]
-            sns.boxplot(
-                d[metric], kde=False, ax=axis[i],
-                label=group if group != "dummy" else None)
-        axis[i].set_xlabel(metric.capitalize() + "s (log)")
-        axis[i].set_ylabel("Barcodes")
-        if by_group != "dummy":
-            axis[i].legend()
-    fig.savefig(
-        output_prefix + f"metrics_per_cell.boxplot.{suffix}.svg"
         .replace("..", "."),
         dpi=300, bbox_inches="tight")
 
@@ -726,10 +706,10 @@ def plot_species_mixing(metrics, norm=False, tail=None, suffix="", cmaps=None, z
         suffix += "_norm"
 
     if cmaps is None:
-        cmaps = [custom_cmap_brb(), plt.get_cmap("coolwarm"), plt.get_cmap("Spectral_r")]
+        cmaps = [get_custom_cmap()]  #, plt.get_cmap("coolwarm"), plt.get_cmap("Spectral_r")]
     for attr, label, kwargs in [
             ('sp_ratio_norm' if norm else 'sp_ratio', 'coloured_by_ratio', {"vmin": 0, "vmax": 1}),
-            ('doublet_norm' if norm else 'doublet', 'coloured_by_doublet', {"vmin": -1, "vmax": 1}),
+            # ('doublet_norm' if norm else 'doublet', 'coloured_by_doublet', {"vmin": -1, "vmax": 1}),
     ]:
         for cmap in cmaps:
             n_panels = 4
@@ -920,46 +900,49 @@ def plot_barcode_match_fraction(r1, r2, suffix=""):
         dpi=300, bbox_inches="tight")
 
 
-def plot_comparison_to_10x(c, d, colour_by="sp_ratio", suffix="", inner=0.4, plotting_kwargs={}):
+def plot_comparison_to_10x(c, d, suffix=""):
     # # Compare side by side in logster
-    kwargs = {"cmap": custom_cmap_byg(inner=inner), "vmin": 0, "vmax": 1, "s": 1, "alpha": 0.1, "rasterized": True}
-    kwargs.update(plotting_kwargs)
+    for attr, label, kwargs in [
+            ('sp_ratio', 'coloured_by_ratio', {"cmap": get_custom_cmap(), "vmin": 0, "vmax": 1}),
+            # ('doublet', 'coloured_by_doublet', {"cmap": "tab20b", "vmin": -1, "vmax": 1}),
+            # ('total', 'coloured_by_total', {"vmin": 100, "vmax": 10000}),
+    ]:
+        fig, axis = plt.subplots(2, 3, figsize=(3 * 4, 2 * 4), tight_layout=True)
+        for ax in axis[:, 0]:
+            ax.set_title("10X")
+            ax.scatter(
+                d['mouse'], d['human'],
+                c=d[attr],
+                s=1, alpha=0.1,
+                rasterized=True, **kwargs)
+        for ax in axis[:, 1]:
+            ax.set_title("scifi-RNA-seq")
+            ax.scatter(
+                c['mouse'], c['human'],
+                c=c[attr],
+                s=1, alpha=0.1,
+                rasterized=True, **kwargs)
+        for ax in axis[:, 2]:
+            ax.set_title("scifi-RNA-seq coloured as 10X only")
+            c.loc[:, "10X_attr"] = d.loc[c.index.get_level_values(1), attr].values
+            ax.scatter(
+                c['mouse'], c['human'],
+                c=c["10X_attr"],
+                s=1, alpha=0.05,
+                rasterized=True, **kwargs)
+        for ax in axis.flatten():
+            ax.set_xlabel("Mouse (UMIs)")
+            ax.set_ylabel("Human (UMIs)")
 
-    fig, axis = plt.subplots(2, 3, figsize=(3 * 3.3, 2 * 3), tight_layout=True)
-    for ax in axis[:, 0]:
-        ax.set_title("10X")
-        col = ax.scatter(
-            d['mouse'], d['human'],
-            c=d[colour_by],
-            **kwargs)
-        add_colorbar_to_axis(col, label=colour_by)
-    for ax in axis[:, 1]:
-        ax.set_title("scifi-RNA-seq")
-        col = ax.scatter(
-            c['mouse'], c['human'],
-            c=c[colour_by],
-            **kwargs)
-        add_colorbar_to_axis(col, label=colour_by)
-    for ax in axis[:, 2]:
-        ax.set_title("scifi-RNA-seq coloured as 10X only")
-        c.loc[:, "10X_attr"] = d.loc[c.index.get_level_values(1), colour_by].values
-        col = ax.scatter(
-            c['mouse'], c['human'],
-            c=c["10X_attr"], **kwargs)
-        add_colorbar_to_axis(col, label=colour_by)
-    for ax in axis.flatten():
-        ax.set_xlabel("Mouse (UMIs)")
-        ax.set_ylabel("Human (UMIs)")
-
-    for ax in axis[0, :]:
-        ax.set_xlim((-(7500 / 30.), 7500))
-        ax.set_ylim((-(7500 / 30.), 7500))
-    for ax in axis[1, :]:
-        ax.loglog()
-    fig.savefig(
-        output_prefix + f"species_mix.comparison_to_droplet.{colour_by}.{suffix}.svg"
-        .replace("..", "."),
-        dpi=300, bbox_inches="tight")
+        for ax in axis[0, :]:
+            ax.set_xlim((-(7500 / 30.), 7500))
+            ax.set_ylim((-(7500 / 30.), 7500))
+        for ax in axis[1, :]:
+            ax.loglog()
+        fig.savefig(
+            output_prefix + f"species_mix.comparison_to_droplet.{label}.{suffix}.svg"
+            .replace("..", "."),
+            dpi=300, bbox_inches="tight")
 
     fig, axis = plt.subplots(3, 3, figsize=(3 * 3, 3 * 3), tight_layout=True)
     attr, label, kwargs = ('doublet', 'coloured_by_doublet', {"cmap": "tab20b", "vmin": 0, "vmax": 1})
@@ -972,33 +955,30 @@ def plot_comparison_to_10x(c, d, colour_by="sp_ratio", suffix="", inner=0.4, plo
         axis[i, 0].scatter(
             p_10x['mouse'], p_10x['human'],
             c=p_10x[attr] + 1,
-            **kwargs)
-        v1 = p_10x[['mouse', 'human']].quantile(0.995).max()
-        axis[i, 0].set_xlim((-(v1 / 30.), v1))
-        axis[i, 0].set_ylim((-(v1 / 30.), v1))
-
-        axis[i, 1].set_title(f"scifi-RNA-seq\n(only droplets which are duplets\nin 10X at {t:.2f} purity)")
+            s=1, alpha=0.1,
+            rasterized=True, **kwargs)
+        axis[i, 1].set_title(f"scifi-RNA-seq\n(only droplets which are duplets in 10X at {t:.2f} purity)")
         axis[i, 1].scatter(
             p_spc['mouse'], p_spc['human'],
             c=p_spc[attr] + 1,
-            **kwargs)
-        v2 = p_spc[['mouse', 'human']].quantile(0.995).max()
-        axis[i, 1].set_xlim((-(v2 / 30.), v2))
-        axis[i, 1].set_ylim((-(v2 / 30.), v2))
-
-        axis[i, 2].set_title(f"scifi-RNA-seq\n(only droplets which are duplets\nin 10X at {t:.2f} purity)")
+            s=1, alpha=0.1,
+            rasterized=True, **kwargs)
+        axis[i, 2].set_title(f"scifi-RNA-seq\n(only droplets which are duplets in 10X at {t:.2f} purity)")
         axis[i, 2].scatter(
             p_10x['mouse'], p_10x['human'],
             color=plt.get_cmap('Pastel1')(0),
-            label="10X")
+            s=1, alpha=0.1,
+            rasterized=True, label="10X")
         axis[i, 2].scatter(
             p_spc['mouse'], p_spc['human'],
             color=plt.get_cmap('Pastel1')(1),
-            label="scifi-RNA-seq")
-        v = max(v1, v2)
-        axis[i, 2].set_xlim((-(v / 30.), v))
-        axis[i, 2].set_ylim((-(v / 30.), v))
+            s=1, alpha=0.1,
+            rasterized=True, label="scifi-RNA-seq")
         axis[i, 2].legend()
+
+    for ax in axis.flatten():
+        ax.set_xlim((-(3000 / 30.), 3000))
+        ax.set_ylim((-(3000 / 30.), 3000))
 
     fig.savefig(
         output_prefix + f"species_mix.comparison_to_only_10X.only_doublets.{label}.{suffix}.svg"
@@ -1080,8 +1060,8 @@ def lin_func(x, m, b):
     return m * x + b
 
 
-def custom_cmap_brb(vmin=-1.0, vmax=1.0, inner=0.4):
-    norm = matplotlib.colors.Normalize(vmin, vmax)
+def get_custom_cmap(vmin=-1.0, vmax=1.0, inner=0.4):
+    norm = matplotlib.colors.Normalize(-1, 1)
     colors = [
         [norm(vmin), "cornflowerblue"],
         [norm(-inner), "crimson"],
@@ -1089,30 +1069,6 @@ def custom_cmap_brb(vmin=-1.0, vmax=1.0, inner=0.4):
         [norm(vmax), "burlywood"]]
     cmap = matplotlib.colors.LinearSegmentedColormap.from_list("", colors)
     cmap.name = "custom"
-    return cmap
-
-
-def custom_cmap_grg(vmin=-1.0, vmax=1.0, inner=0.4):
-    norm = matplotlib.colors.Normalize(vmin, vmax)
-    colors = [
-        [norm(vmin), "grey"],
-        [norm(-inner), "crimson"],
-        [norm(inner), "crimson"],
-        [norm(vmax), "grey"]]
-    cmap = matplotlib.colors.LinearSegmentedColormap.from_list("", colors)
-    cmap.name = "custom_grg"
-    return cmap
-
-
-def custom_cmap_byg(vmin=-1.0, vmax=1.0, inner=0.4):
-    norm = matplotlib.colors.Normalize(vmin, vmax)
-    colors = [
-        [norm(vmin), "#3A51A3"],
-        [norm(-inner), "#fbaf3f"],
-        [norm(inner), "#fbaf3f"],
-        [norm(vmax), "#55BC82"]]
-    cmap = matplotlib.colors.LinearSegmentedColormap.from_list("", colors)
-    cmap.name = "custom_bgg"
     return cmap
 
 
