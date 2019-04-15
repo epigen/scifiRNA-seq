@@ -107,3 +107,37 @@ os.system(cmd)
 # Remove vanilla genome
 os.remove(os.path.join(spiked_dir, "Homo_sapiens.GRCh38.dna.primary_assembly.fa"))
 os.remove(os.path.join(spiked_dir, "Homo_sapiens.GRCh38.77.gtf"))
+
+
+# Build STAR index for newer version (contruct + spiked with gRNAs)
+cmd = "srun -J new_STAR_reference --mem 80000 -p develop /workspace/STAR-2.7.0e/bin/Linux_x86_64_static/STAR"
+cmd += " --runThreadN 8"
+cmd += " --runMode genomeGenerate"
+cmd += " --genomeDir {}".format(spiked_dir)
+cmd += " --genomeFastaFiles {}".format(os.path.join(spiked_dir, "Homo_sapiens.GRCh38.dna.primary_assembly.spiked.fa"))
+cmd += " --sjdbGTFfile {}".format(os.path.join(spiked_dir, "Homo_sapiens.GRCh38.77.spiked.gtf"))
+cmd += " --sjdbOverhang 74"
+os.system(cmd)
+
+# sbatch \
+# -J new_STAR_reference \
+# -c 12 --mem 80000 -p develop \
+# --wrap "/cm/shared/apps/star/2.4.2a/STAR \
+# --runThreadN 8 \
+# --runMode genomeGenerate \
+# --genomeDir /home/arendeiro/resources/genomes/hg38_spiked_lambda/indexed_star_index_2.4.2a \
+# --genomeFastaFiles /home/arendeiro/resources/genomes/hg38_spiked_lambda/Homo_sapiens.GRCh38.dna.primary_assembly.spiked.fa \
+# --sjdbGTFfile /home/arendeiro/resources/genomes/hg38_spiked_lambda/Homo_sapiens.GRCh38.77.spiked.gtf \
+# --sjdbOverhang 74"
+
+
+# sbatch \
+# -J new_STAR_reference \
+# -c 12 --mem 80000 -p develop \
+# --wrap "~/workspace/STAR-2.7.0e/bin/Linux_x86_64_static/STAR \
+# --runThreadN 12 \
+# --runMode genomeGenerate \
+# --genomeDir /home/arendeiro/resources/genomes/hg38_mm10_transgenes_Tcrlibrary/indexed_STAR_2.7.0e \
+# --genomeFastaFiles /home/arendeiro/resources/genomes/hg38_mm10_transgenes_Tcrlibrary/Homo_sapiens-Mus_musculus.Ensembl92.dna.primary_assembly.Tcr_lambda_spiked.fa \
+# --sjdbGTFfile /home/arendeiro/resources/genomes/hg38_mm10_transgenes_Tcrlibrary/Homo_sapiens-Mus_musculus.Ensembl92.dna.primary_assembly.Tcr_lambda_spiked.gtf \
+# --sjdbOverhang 74"

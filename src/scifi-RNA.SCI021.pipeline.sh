@@ -46,40 +46,40 @@ echo '#!/bin/env bash' > $JOB
 
 echo "date" >> $JOB
 
-# # align with STAR >=2.7.0e
-# echo "" >> $JOB
-# echo "STAR \
-# --runThreadN $CPUS \
-# --genomeDir $STAR_DIR \
-# --clip3pAdapterSeq AAAAAA \
-# --outSAMprimaryFlag AllBestScore \
-# --outSAMattributes All \
-# --outFilterScoreMinOverLread 0 --outFilterMatchNminOverLread 0 --outFilterMatchNmin 0 \
-# --outSAMunmapped Within \
-# --outFileNamePrefix ${SAMPLE_DIR}/${SAMPLE_NAME}.${PART}.STAR. \
-# --outSAMtype BAM Unsorted \
-# --readFilesType SAM SE \
-# --readFilesCommand samtools view -h \
-# --quantMode TranscriptomeSAM GeneCounts \
-# --readFilesIn $INPUT_BAM" >> $JOB
+# align with STAR >=2.7.0e
+echo "" >> $JOB
+echo "STAR \
+--runThreadN $CPUS \
+--genomeDir $STAR_DIR \
+--clip3pAdapterSeq AAAAAA \
+--outSAMprimaryFlag AllBestScore \
+--outSAMattributes All \
+--outFilterScoreMinOverLread 0 --outFilterMatchNminOverLread 0 --outFilterMatchNmin 0 \
+--outSAMunmapped Within \
+--outFileNamePrefix ${SAMPLE_DIR}/${SAMPLE_NAME}.${PART}.STAR. \
+--outSAMtype BAM Unsorted \
+--readFilesType SAM SE \
+--readFilesCommand samtools view -h \
+--quantMode TranscriptomeSAM GeneCounts \
+--readFilesIn $INPUT_BAM" >> $JOB
 
-# # count all reads overlapping a gene
-# echo "" >> $JOB
-# echo "featureCounts \
-# -T $CPUS \
-# -F GTF \
-# -t gene \
-# -g gene_id \
-# --extraAttributes gene_name \
-# -Q 30 \
-# -s 0 \
-# -R BAM \
-# -a $GTF_FILE \
-# -o ${SAMPLE_DIR}/${SAMPLE_NAME}.${PART}.STAR.featureCounts.quant_gene.tsv \
-# ${SAMPLE_DIR}/${SAMPLE_NAME}.${PART}.STAR.Aligned.out.bam" >> $JOB
-# # -M \
-# # -Q 0 \
-# # --primary \
+# count all reads overlapping a gene
+echo "" >> $JOB
+echo "featureCounts \
+-T $CPUS \
+-F GTF \
+-t gene \
+-g gene_id \
+--extraAttributes gene_name \
+-Q 30 \
+-s 0 \
+-R BAM \
+-a $GTF_FILE \
+-o ${SAMPLE_DIR}/${SAMPLE_NAME}.${PART}.STAR.featureCounts.quant_gene.tsv \
+${SAMPLE_DIR}/${SAMPLE_NAME}.${PART}.STAR.Aligned.out.bam" >> $JOB
+# -M \
+# -Q 0 \
+# --primary \
 
 # Filtering out secondary alignments and reads not assigned to a gene
 # and convert to CSV
