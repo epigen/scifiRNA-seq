@@ -23,5 +23,6 @@ I decided not to keep all the code specific to each version/run, but simply to g
 |**SCI020-resequencing**|scifiRNA-seq|Success, publication 4K mixture experiment|
 |**SCI021**|scifiRNA-seq|Success, Large scale 125K mixture experiment, hitting native 10X limitations, scifi still with a lot of space to grow, barcodes need inspection though|
 |**SCI022**|scifiRNA-seq|Failure, Mixture cells overtook primary cells; first 384 well experiment; learned a few things about going into primary cells; barcodes need further inspection|
+|**SCI023/24**|scifiRNA-seq|T cells from 4 donors; Some problems remain|
 
 the experiment IDs correspond to the [metadata annotations](metadata/annotation.csv)
