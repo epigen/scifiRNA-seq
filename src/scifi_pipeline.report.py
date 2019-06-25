@@ -17,13 +17,13 @@ import scipy
 def parse_args():
     parser = ArgumentParser()
     parser.add_argument(
-        dest="metric_files", nargs="+",
-        help="Input metric files from the output of sci-RNA.summarizer.py. "
-             "Several can be given.")
+        "--metric-file", dest="metric_files",
+        help="Input metric files from the output of sci-RNA.summarizer.py. Only one can be provided.",
+        required=True, nargs="+")
     parser.add_argument(
-        dest="output_prefix",
-        help="Absolute path prefix for output files. "
-             "Example: 'results/SCIXX_experiment.'.")
+        "--output-prefix", dest="output_prefix",
+        help="Absolute path prefix for output files. ",
+        required=True)
     parser.add_argument(
         "--plotting-attributes", dest="plotting_attributes", nargs="*",
         help="Additional attributes to plot metrics grouped by. "
@@ -57,10 +57,23 @@ def parse_args():
 
     # # Example:
     # args = parser.parse_args([
-    #     "/scratch/lab_bock/shared/projects/sci-rna/data/SCI024_Tcell_s/SCI024_Tcell_s.exon.metrics.csv.gz",
-    #     "results/SCI024_Tcell_s.exon.",
-    #     "--plotting-attributes", "plate", "donor_id"])
+        # "--metric-file", "/scratch/lab_bock/shared/projects/sci-rna/data/SCI024_Tcell_s/SCI024_Tcell_s.exon.metrics.csv.gz",
+        # "--output-prefix", "results/SCI024_Tcell_s.exon.",
+        # "--plotting-attributes", "plate", "donor_id"])
     args = parser.parse_args()
+
+
+    if not args.output_prefix.endswith("."):
+        args.output_prefix += "."
+
+    # expand glob if needed
+    if len(args.metric_files) == 1:
+        if "*" in args.metric_files[0]:
+            args.metric_files = glob(args.metric_files[0])
+
+    if not os.path.exists(os.path.dirname(args.output_prefix)):
+        os.makedirs(os.path.dirname(args.output_prefix))
+
     return args
 
 
@@ -69,14 +82,15 @@ def main():
     args = parse_args()
 
     # read text files
+    print(args.metric_files)
     metrics = load_metrics(args.metric_files, nrows=args.nrows)
 
     # # Plot
     # # # Loglog line plot of rank vs abundance
-    t = args.expected_cell_number * 5
-    plot_metrics_lineplot(metrics, tail=t)
+    t = args.expected_cell_number * 5  # number of barcodes to plot
+    plot_metrics_lineplot(metrics, tail=t)  # knee-plot
     for attribute in args.plotting_attributes:
-        plot_metrics_lineplot(metrics, tail=t, by_group=attribute)
+        plot_metrics_lineplot(metrics, tail=t, by_group=attribute)  # e.g. used for fixation, no fixation
 
     # # # Efficiency plot (UMI and gene yield in relation to reads per cell)
     t = int(args.expected_cell_number * 5)
