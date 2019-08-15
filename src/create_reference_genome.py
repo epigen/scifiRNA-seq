@@ -141,3 +141,13 @@ os.system(cmd)
 # --genomeFastaFiles /home/arendeiro/resources/genomes/hg38_mm10_transgenes_Tcrlibrary/Homo_sapiens-Mus_musculus.Ensembl92.dna.primary_assembly.Tcr_lambda_spiked.fa \
 # --sjdbGTFfile /home/arendeiro/resources/genomes/hg38_mm10_transgenes_Tcrlibrary/Homo_sapiens-Mus_musculus.Ensembl92.dna.primary_assembly.Tcr_lambda_spiked.gtf \
 # --sjdbOverhang 74"
+
+
+# sbatch -c 24 -p mediumq --time 1-08:00:00 -J new_STAR_reference --mem 80000 \
+# --wrap "~/workspace/STAR-2.7.0e/bin/Linux_x86_64_static/STAR \
+# --runThreadN 24 \
+# --runMode genomeGenerate \
+# --genomeDir ~/resources/genomes/hg38/indexed_STAR-2.7.0e \
+# --genomeFastaFiles /home/arendeiro/resources/genomes/hg38/10X/refdata-cellranger-GRCh38-1.2.0/fasta/genome.fa \
+# --sjdbGTFfile /home/arendeiro/resources/genomes/hg38/10X/refdata-cellranger-GRCh38-1.2.0/genes/genes.gtf \
+# --sjdbOverhang 54"
