@@ -6,9 +6,6 @@ case $i in
     -n=*|--run-name=*)
     RUN_NAME="${i#*=}"
     shift # past argument=value
-    ;;    --barcode_annotation=*)
-    BARCODE_ANNOTATION="${i#*=}"
-    shift # past argument=value
     ;;    --output-dir=*)
     ROOT_OUTPUT_DIR="${i#*=}"
     shift # past argument=value
@@ -24,12 +21,6 @@ case $i in
     ;;    --time=*)
     TIME="${i#*=}"
     shift # past argument=value
-    ;;    --python-summarizer-script=*)
-    PYTHON_SUMMARIZER_SCRIPT="${i#*=}"
-    shift # past argument=value
-    ;;    --round2_whitelist=*)
-    ROUND2_WHITELIST="${i#*=}"
-    shift # past argument=value
     ;;
     *)
           # unknown option
@@ -44,11 +35,9 @@ echo "SLURM PARAMETERS = $CPUS, $MEM, $QUEUE, $TIME"
 # Start
 mkdir -p $ROOT_OUTPUT_DIR
 cd $ROOT_OUTPUT_DIR
-echo "successfully entered directory"
 
 
 # Summarize across lanes
-echo "BARCODE_ANNOTATION  = ${BARCODE_ANNOTATION}"
 for SAMPLE_NAME in `tail -n +2 $BARCODE_ANNOTATION | cut -d , -f 14`; do
 JOB_NAME=scifi_pipeline.${SAMPLE_NAME}.summarize
 SAMPLE_DIR=${ROOT_OUTPUT_DIR}/${SAMPLE_NAME}
@@ -58,11 +47,9 @@ LOG=${SAMPLE_DIR}/${JOB_NAME}.log
 echo '#!/bin/env bash' > $JOB
 echo "date" >> $JOB
 echo "" >> $JOB
-echo "python3 -u $PYTHON_SUMMARIZER_SCRIPT \
+echo "python3 -u ~/sci-RNA-seq.summarizer.py \
 --sample-name $SAMPLE_NAME \
---r1-annot $BARCODE_ANNOTATION \
 --r1-attributes plate plate_well donor_id sex \
---r2-barcodes $ROUND2_WHITELIST \
 --cell-barcodes r2 \
 --only-summary \
 --no-save-intermediate \
@@ -72,11 +59,9 @@ echo "python3 -u $PYTHON_SUMMARIZER_SCRIPT \
 ${SAMPLE_DIR}/${SAMPLE_NAME}.*.STAR.Aligned.out.bam.featureCounts.bam \
 ${SAMPLE_DIR}/${SAMPLE_NAME}" >> $JOB
 echo "" >> $JOB
-echo "python3 -u $PYTHON_SUMMARIZER_SCRIPT \
+echo "python3 -u ~/sci-RNA-seq.summarizer.py \
 --sample-name $SAMPLE_NAME \
---r1-annot $BARCODE_ANNOTATION \
 --r1-attributes plate plate_well donor_id sex \
---r2-barcodes $ROUND2_WHITELIST \
 --cell-barcodes r2 \
 --only-summary \
 --no-save-intermediate \

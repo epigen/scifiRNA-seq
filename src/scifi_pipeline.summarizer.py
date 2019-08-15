@@ -214,7 +214,7 @@ def parse_data(files, nrows=1e10):
 
     print(f"# {time.asctime()} - Parsing files.")
     pieces = list()
-    for file in files:  # for sequencing lanes
+    for file in files:
         print(f"# {time.asctime()} - Parsing file {file}.")
 
         bam = pysam.AlignmentFile(file)
@@ -224,20 +224,20 @@ def parse_data(files, nrows=1e10):
             # Filter
             if read.is_qcfail or read.is_unmapped or read.is_secondary or read.is_supplementary:
                 continue
-            if "Unassigned" in read.get_tag("XS"):  # not assigned to gene
+            if "Unassigned" in read.get_tag("XS"):
                 continue
 
             piece = [
-                read.qname.split("#")[0],  # read name
-                read.get_tag("BC")[0:13],  # round1
-                read.get_tag("r2"),  # round2
-                read.get_tag("RX"),  # UMI
-                read.get_tag("XT"),  # gene ensembl id
-                read.pos]  # chromosomal position
+                read.qname.split("#")[0],
+                read.get_tag("BC")[0:13],
+                read.get_tag("r2"),
+                read.get_tag("RX"),
+                read.get_tag("XT"),
+                read.pos]
             pieces.append(piece)
         print(f"# {time.asctime()} - Done with file {file}. {i} lines.")
 
-    print(f"# {time.asctime()} - Concatenating parts.")  # the two lanes
+    print(f"# {time.asctime()} - Concatenating parts.")
     return pd.DataFrame(pieces, columns=['read', 'r1', 'r2', 'umi', 'gene', 'pos'])
 
 
