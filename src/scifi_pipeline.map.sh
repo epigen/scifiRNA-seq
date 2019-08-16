@@ -72,15 +72,20 @@ LANES=`seq 1 $N_LANES`
 # # unfortunatelly, even though STAR can output to stdout 
 # # and featureCounts read from stdin, one cannot pipe them as 
 # # featureCounts does not support detailed BAM output with stdin
-for SAMPLE_NAME in `tail -n +2 $BARCODE_ANNOTATION | cut -d , -f 14`; do
+for SAMPLE_NAME in `tail -n +2 $BARCODE_ANNOTATION | cut -d , -f 1`; do
 for LANE in ${LANES[@]}; do
-INPUT_BAM=/scratch/users/dbarreca/private/custom_demux/scRNA/${FLOWCELL}/${FLOWCELL}_${LANE}_samples/${FLOWCELL}_${LANE}#${SAMPLE_NAME}.bam
-
-JOB_NAME=scifiRNA-seq.${SAMPLE_NAME}.${LANE}.process
+JOB_NAME=scifi_pipeline.${SAMPLE_NAME}.${LANE}.map
 SAMPLE_DIR=${ROOT_OUTPUT_DIR}/${SAMPLE_NAME}
 mkdir -p $SAMPLE_DIR #/{logs,fastqc,mapped,barcodes,expression}
 JOB=${SAMPLE_DIR}/${JOB_NAME}.sh
 LOG=${SAMPLE_DIR}/${JOB_NAME}.log
+
+if [[ $string == *"gRNA"* ]]; then
+  INPUT_BAM=${SAMPLE_DIR}/${SAMPLE_NAME}.${LANE}.trimmed.bam
+fi
+if [[ $string != *"gRNA"* ]]; then
+  INPUT_BAM=/scratch/users/dbarreca/private/custom_demux/scRNA/${FLOWCELL}/${FLOWCELL}_${LANE}_samples/${FLOWCELL}_${LANE}#${SAMPLE_NAME}.bam
+fi
 
 echo '#!/bin/env bash' > $JOB
 

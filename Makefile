@@ -8,6 +8,19 @@ GTF_FILE       := /home/arendeiro/resources/genomes/hg38/10X/refdata-cellranger-
 GTF_FILE       := /home/arendeiro/resources/genomes/hg38_mm10_transgenes_Tcrlibrary/Homo_sapiens-Mus_musculus.Ensembl92.dna.primary_assembly.Tcr_lambda_spiked.gtf
 
 
+trim: parse
+	@echo "scifi_pipeline: trim"
+	sh src/scifi_pipeline.trim.sh \
+	--run-name=$(RUN_NAME) \
+	--flowcell=$(FLOWCELL) \
+	--n-lanes=$(N_LANES) \
+	--annotation=$(ANNOTATION) \
+	--cpus=1 \
+	--mem=8000 \
+	--queue=shortq \
+	--time=08:00:00 \
+	--output-dir=$(ROOT_OUTPUT_DIR)
+
 map: parse
 	@echo "scifi_pipeline: map"
 	sh src/scifi_pipeline.map.sh \
@@ -16,7 +29,7 @@ map: parse
 	--n-lanes=$(N_LANES) \
 	--annotation=$(ANNOTATION) \
 	--cpus=4 \
-	--mem=50000 \
+	--mem=80000 \
 	--queue=shortq \
 	--time=08:00:00 \
 	--output-dir=$(ROOT_OUTPUT_DIR) \
@@ -29,6 +42,7 @@ filter: parse
 	sh src/scifi_pipeline.filter.sh \
 	--run-name=$(RUN_NAME) \
 	--output-dir=$(ROOT_OUTPUT_DIR) \
+	--annotation=$(ANNOTATION) \
 	--cpus=1 \
 	--mem=8000 \
 	--queue=shortq \
@@ -47,17 +61,17 @@ join: parse
 plot: parse
 	@echo "scifi_pipeline: plot"
 	sbatch -J scifiRNA-seq.$(RUN_NAME).plot \
-	-o $(ROOT_OUTPUT_DIR)/$(RUN_NAME).plot.log
+	-o $(ROOT_OUTPUT_DIR)/$(RUN_NAME).plot.log \
 	-p shortq --mem 120000 --cpus 2 \
-	--wrap "python3 -u src/sci-RNA-seq.report.py \
+	--wrap "python3 -u src/scifi_pipeline.report.py \
 	$(ROOT_OUTPUT_DIR)/$(RUN_NAME).metrics.csv.gz \
 	results/$(RUN_NAME). \
 	--plotting-attributes plate donor_id"
 
 	sbatch -J scifiRNA-seq.$(RUN_NAME).plot-exon \
-	-o $(ROOT_OUTPUT_DIR)/$(RUN_NAME).plot-exon.log
+	-o $(ROOT_OUTPUT_DIR)/$(RUN_NAME).plot-exon.log \
 	-p shortq --mem 120000 --cpus 2 \
-	--wrap "python3 -u src/sci-RNA-seq.report.py \
+	--wrap "python3 -u src/scifi_pipeline.report.py \
 	$(ROOT_OUTPUT_DIR)/$(RUN_NAME).exon.metrics.csv.gz \
 	results/$(RUN_NAME).exon. \
 	--plotting-attributes plate donor_id"
@@ -74,10 +88,10 @@ ROOT_OUTPUT_DIR := /scratch/lab_bock/shared/projects/sci-rna/data/$(RUN_NAME)
 endif
 
 
-all: map filter join plot
+all: trim map filter join plot
 
 clean:
 	find . -name "*bam" -delete
 
-.PHONY: map filter join plot clean
+.PHONY: trim map filter join plot clean
 .SILENT: all

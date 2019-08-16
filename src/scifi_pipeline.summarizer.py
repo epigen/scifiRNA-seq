@@ -101,6 +101,8 @@ def parse_args():
     #     "/scratch/lab_bock/shared/projects/sci-rna/data/SCI024_Tcell_s/SCI023_Tcell_D77_A01/SCI023_Tcell_D77_A01"])
     if args.sample_name is None:
         args.sample_name = args.output_prefix
+    if args.r1_attributes is None:
+        args.r1_attributes = []
     args.save_intermediate = not args.no_save_intermediate
     args.output_header = not args.no_output_header
     if not args.output_prefix.endswith("."):
@@ -197,6 +199,9 @@ def main():
         plot_efficiency(
             metrics_filtered, tail=t, suffix="exact_match", colour_by="unique_fraction"
         )
+
+    if args.species_mixture:
+        plot_species_mixing(metrics)
 
     # Well and droplet inspection
     if len(args.cell_barcodes) > 1:
@@ -380,82 +385,85 @@ def gather_stats_per_cell(
     if save_intermediate:
         to_pickle(metrics, "metrics" + suffix)
 
-    # # plot ammount of species-specific bias
-    n = 1
-    fig, axis = plt.subplots(n, 1, figsize=(3, n * 3), tight_layout=True)
-    axis.plot(r.index, r, "o-")
-    axis.axvline(args.expected_cell_number, linestyle="--", color="grey")
-    axis.set_xlabel("Top N barcodes taken into account")
-    axis.set_ylabel("Ratio of mean UMIs per cell\nbetween mouse and human")
-    axis.set_xscale("log")
-    fig.savefig(
-        args.output_prefix + f"species_bias.lineplot.svg".replace("..", "."),
-        dpi=300,
-        bbox_inches="tight",
-    )
+    # # # plot ammount of species-specific bias
+    # try:
+    #     n = 1
+    #     fig, axis = plt.subplots(n, 1, figsize=(3, n * 3), tight_layout=True)
+    #     axis.plot(r.index, r, "o-")
+    #     axis.axvline(args.expected_cell_number, linestyle="--", color="grey")
+    #     axis.set_xlabel("Top N barcodes taken into account")
+    #     axis.set_ylabel("Ratio of mean UMIs per cell\nbetween mouse and human")
+    #     axis.set_xscale("log")
+    #     fig.savefig(
+    #         args.output_prefix + f"species_bias.lineplot.svg".replace("..", "."),
+    #         dpi=300,
+    #         bbox_inches="tight",
+    #     )
+    # except:
+    #     print("Couldn't plot species bias plot")
 
-    # Plot illustration of normalization procedure
-    metrics2 = metrics.tail(int(2 * args.expected_cell_number))
+    # # Plot illustration of normalization procedure
+    # metrics2 = metrics.tail(int(2 * args.expected_cell_number))
 
-    for label in ["", ".log"]:
-        fig, axis = plt.subplots(2, 2, figsize=(2 * 3, 2 * 3), tight_layout=True)
-        kwargs = {"s": 0.1, "alpha": 0.2, "rasterized": True, "cmap": get_custom_cmap()}
-        axis[0, 0].scatter(
-            metrics2["mouse"], metrics2["human"], c=metrics2["sp_ratio"], **kwargs
-        )
-        axis[0, 1].scatter(
-            metrics2["mouse"], metrics2["human"], c=metrics2["sp_ratio_norm"], **kwargs
-        )
-        v = metrics2[["mouse", "human"]].quantile(0.999).max()
-        v += v * 0.1
-        for ax in axis[0, :]:
-            if label == "":
-                ax.set_xlim((-(v / 30.0), v))
-                ax.set_ylim((-(v / 30.0), v))
-            else:
-                ax.loglog()
-            ax.plot((0, v), (0, v), linestyle="--", color="grey")
-            ax.plot(
-                (0, v),
-                (0, v * (1 / r[int(args.expected_cell_number)])),
-                linestyle="--",
-                color="orange",
-            )
-            ax.set_ylabel("Human (UMIs)")
+    # for label in ["", ".log"]:
+    #     fig, axis = plt.subplots(2, 2, figsize=(2 * 3, 2 * 3), tight_layout=True)
+    #     kwargs = {"s": 0.1, "alpha": 0.2, "rasterized": True, "cmap": get_custom_cmap()}
+    #     axis[0, 0].scatter(
+    #         metrics2["mouse"], metrics2["human"], c=metrics2["sp_ratio"], **kwargs
+    #     )
+    #     axis[0, 1].scatter(
+    #         metrics2["mouse"], metrics2["human"], c=metrics2["sp_ratio_norm"], **kwargs
+    #     )
+    #     v = metrics2[["mouse", "human"]].quantile(0.999).max()
+    #     v += v * 0.1
+    #     for ax in axis[0, :]:
+    #         if label == "":
+    #             ax.set_xlim((-(v / 30.0), v))
+    #             ax.set_ylim((-(v / 30.0), v))
+    #         else:
+    #             ax.loglog()
+    #         ax.plot((0, v), (0, v), linestyle="--", color="grey")
+    #         ax.plot(
+    #             (0, v),
+    #             (0, v * (1 / r[int(args.expected_cell_number)])),
+    #             linestyle="--",
+    #             color="orange",
+    #         )
+    #         ax.set_ylabel("Human (UMIs)")
 
-        axis[1, 0].scatter(
-            metrics2["mouse"], metrics2["human_norm"], c=metrics2["sp_ratio"], **kwargs
-        )
-        axis[1, 1].scatter(
-            metrics2["mouse"],
-            metrics2["human_norm"],
-            c=metrics2["sp_ratio_norm"],
-            **kwargs,
-        )
-        v = metrics2[["mouse", "human_norm"]].quantile(0.999).max()
-        v += v * 0.1
-        for ax in axis[1, :]:
-            if label == "":
-                ax.set_xlim((-(v / 30.0), v))
-                ax.set_ylim((-(v / 30.0), v))
-            else:
-                ax.loglog()
-            ax.plot((0, v), (0, v), linestyle="--", color="grey")
-            ax.plot((0, v), (0, v), linestyle="--", color="orange")
-            ax.set_ylabel("Human (norm UMIs)")
+    #     axis[1, 0].scatter(
+    #         metrics2["mouse"], metrics2["human_norm"], c=metrics2["sp_ratio"], **kwargs
+    #     )
+    #     axis[1, 1].scatter(
+    #         metrics2["mouse"],
+    #         metrics2["human_norm"],
+    #         c=metrics2["sp_ratio_norm"],
+    #         **kwargs,
+    #     )
+    #     v = metrics2[["mouse", "human_norm"]].quantile(0.999).max()
+    #     v += v * 0.1
+    #     for ax in axis[1, :]:
+    #         if label == "":
+    #             ax.set_xlim((-(v / 30.0), v))
+    #             ax.set_ylim((-(v / 30.0), v))
+    #         else:
+    #             ax.loglog()
+    #         ax.plot((0, v), (0, v), linestyle="--", color="grey")
+    #         ax.plot((0, v), (0, v), linestyle="--", color="orange")
+    #         ax.set_ylabel("Human (norm UMIs)")
 
-        for ax in axis.flatten():
-            ax.set_xlabel("Mouse (UMIs)")
-        axis[0, 0].set_title("Coloured by ratio")
-        axis[0, 1].set_title("Coloured by norm ratio")
-        fig.savefig(
-            args.output_prefix
-            + f"species_bias.original_vs_corrected.scatterplot{label}.svg".replace(
-                "..", "."
-            ),
-            dpi=300,
-            bbox_inches="tight",
-        )
+    #     for ax in axis.flatten():
+    #         ax.set_xlabel("Mouse (UMIs)")
+    #     axis[0, 0].set_title("Coloured by ratio")
+    #     axis[0, 1].set_title("Coloured by norm ratio")
+    #     fig.savefig(
+    #         args.output_prefix
+    #         + f"species_bias.original_vs_corrected.scatterplot{label}.svg".replace(
+    #             "..", "."
+    #         ),
+    #         dpi=300,
+    #         bbox_inches="tight",
+    #     )
 
     return metrics
 
