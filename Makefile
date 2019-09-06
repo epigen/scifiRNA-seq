@@ -1,15 +1,27 @@
 .DEFAULT_GOAL := all
 
-# Change these parameters
-STAR_EXE       := /home/arendeiro/workspace/STAR-2.7.0e/bin/Linux_x86_64_static/STAR
-STAR_DIR       := /home/arendeiro/resources/genomes/hg38/indexed_STAR-2.7.0e/
-STAR_DIR       := /home/arendeiro/resources/genomes/hg38_mm10_transgenes_Tcrlibrary/indexed_STAR_2.7.0e/
-GTF_FILE       := /home/arendeiro/resources/genomes/hg38/10X/refdata-cellranger-GRCh38-1.2.0/genes/genes.gtf
-GTF_FILE       := /home/arendeiro/resources/genomes/hg38_mm10_transgenes_Tcrlibrary/Homo_sapiens-Mus_musculus.Ensembl92.dna.primary_assembly.Tcr_lambda_spiked.gtf
+# These parameters can be overwritten
+STAR_EXE := /home/arendeiro/workspace/STAR-2.7.0e/bin/Linux_x86_64_static/STAR
+STAR_DIR := /home/arendeiro/resources/genomes/hg38/indexed_STAR-2.7.0e/
+STAR_DIR := /home/arendeiro/resources/genomes/hg38_mm10_transgenes_Tcrlibrary/indexed_STAR_2.7.0e/
+GTF_FILE := /home/arendeiro/resources/genomes/hg38/10X/refdata-cellranger-GRCh38-1.2.0/genes/genes.gtf
+GTF_FILE := /home/arendeiro/resources/genomes/hg38_mm10_transgenes_Tcrlibrary/Homo_sapiens-Mus_musculus.Ensembl92.dna.primary_assembly.Tcr_lambda_spiked.gtf
 
+parse:
+	@[ "${RUN_NAME}" ] || ( echo "'RUN_NAME' is not set"; exit 1 )
+	@[ "${FLOWCELL}" ] || ( echo "'FLOWCELL' is not set"; exit 1 )
+	@[ "${N_LANES}" ] || ( echo "'N_LANES' is not set"; exit 1 )
+ANNOTATION ?= "/scratch/lab_bock/shared/projects/sci-rna/metadata/sciRNA-seq.PD190_humanmouse.oligos_2019-09-05.csv"
+ROOT_OUTPUT_DIR ?= /scratch/lab_bock/shared/projects/sci-rna/data/$(RUN_NAME)
+VARIABLES ?= "plate_well"
+SPECIES_MIXING ?= 1
+SP := 
+ifeq ($(SPECIES_MIXING), 1)
+	SP := --species-mixture
+endif
 
 trim: parse
-	@echo "scifi_pipeline: trim"
+	$(info "scifi_pipeline: trim")
 	sh src/scifi_pipeline.trim.sh \
 	--run-name=$(RUN_NAME) \
 	--flowcell=$(FLOWCELL) \
@@ -22,7 +34,7 @@ trim: parse
 	--output-dir=$(ROOT_OUTPUT_DIR)
 
 map: parse
-	@echo "scifi_pipeline: map"
+	$(info "scifi_pipeline: map")
 	sh src/scifi_pipeline.map.sh \
 	--run-name=$(RUN_NAME) \
 	--flowcell=$(FLOWCELL) \
@@ -38,35 +50,40 @@ map: parse
 	--gtf=$(GTF_FILE)
 
 filter: parse
-	@echo "scifi_pipeline: filter"
+	$(info "scifi_pipeline: filter")
 	sh src/scifi_pipeline.filter.sh \
 	--run-name=$(RUN_NAME) \
 	--output-dir=$(ROOT_OUTPUT_DIR) \
 	--annotation=$(ANNOTATION) \
+	--variables=$(VARIABLES) \
+	--species-mixture=$(SPECIES_MIXING) \
 	--cpus=1 \
 	--mem=8000 \
 	--queue=shortq \
 	--time=08:00:00
 
 join: parse
-	@echo "scifi_pipeline: join"
+	$(info "scifi_pipeline: join")
 	sh src/scifi_pipeline.join.sh \
 	--run-name=$(RUN_NAME) \
 	--output-dir=$(ROOT_OUTPUT_DIR) \
+	--variables=$(VARIABLES) \
+	--species-mixture=$(SPECIES_MIXING) \
 	--cpus=1 \
 	--mem=12000 \
 	--queue=shortq \
 	--time=08:00:00
 
 plot: parse
-	@echo "scifi_pipeline: plot"
+	$(info "scifi_pipeline: plot")
+
 	sbatch -J scifiRNA-seq.$(RUN_NAME).plot \
 	-o $(ROOT_OUTPUT_DIR)/$(RUN_NAME).plot.log \
 	-p shortq --mem 120000 --cpus 2 \
 	--wrap "python3 -u src/scifi_pipeline.report.py \
 	$(ROOT_OUTPUT_DIR)/$(RUN_NAME).metrics.csv.gz \
 	results/$(RUN_NAME). \
-	--plotting-attributes plate donor_id"
+	--plotting-attributes $(VARIABLES) $(SP)"
 
 	sbatch -J scifiRNA-seq.$(RUN_NAME).plot-exon \
 	-o $(ROOT_OUTPUT_DIR)/$(RUN_NAME).plot-exon.log \
@@ -74,19 +91,7 @@ plot: parse
 	--wrap "python3 -u src/scifi_pipeline.report.py \
 	$(ROOT_OUTPUT_DIR)/$(RUN_NAME).exon.metrics.csv.gz \
 	results/$(RUN_NAME).exon. \
-	--plotting-attributes plate donor_id"
-
-parse:
-	@[ "${RUN_NAME}" ] || ( echo "'RUN_NAME' is not set"; exit 1 )
-	@[ "${FLOWCELL}" ] || ( echo "'FLOWCELL' is not set"; exit 1 )
-	@[ "${N_LANES}" ] || ( echo "'N_LANES' is not set"; exit 1 )
-ifeq ($(origin ANNOTATION),undefined)
-ANNOTATION := "/scratch/lab_bock/shared/projects/sci-rna/metadata/sciRNA-seq.SCI024.oligos_2019-05-17.csv"
-endif
-ifeq ($(origin ROOT_OUTPUT_DIR),undefined)
-ROOT_OUTPUT_DIR := /scratch/lab_bock/shared/projects/sci-rna/data/$(RUN_NAME)
-endif
-
+	--plotting-attributes $(VARIABLES) $(SP)"
 
 all: trim map filter join plot
 

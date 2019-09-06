@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+
+import sys
+from argparse import ArgumentParser
+import subprocess
+
+import pandas as pd
+
+
+def main():
+    parser = ArgumentParser()
+    parser.add_argument("cmd")
+    parser.add_argument("annotation")
+    args = parser.parse_args()
+
+    df = pd.read_csv(args.annotation)
+
+    df = df.query("toggle == 1")
+
+    df = (
+        df
+        .assign(
+            nlanes=df['nlanes'].astype(int),
+            species_mixing=df['species_mixing'].astype(int))
+        )
+
+    for i, sample in df.iterrows():
+        print(f"Doing sample {sample['sample_name']}")
+        cmd = f"make {args.cmd} "
+        cmd += f"RUN_NAME={sample['sample_name']} "
+        cmd += f"FLOWCELL={sample['flowcell']} "
+        cmd += f"N_LANES={sample['nlanes']} "
+        cmd += f"ANNOTATION={sample['annotation']} "
+        cmd += f"VARIABLES={sample['variables']} "
+        cmd += f"SPECIES_MIXING={sample['species_mixing']}"
+        print(cmd)
+        subprocess.Popen(cmd.split(" "))
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -34,14 +34,12 @@ def parse_args():
         help="Which barcodes to take into consideration to group molecules by. "
              "Defaults to 'r1 r2'.")
     root = os.path.expanduser("~/projects/sci-rna")
-    default = os.path.join(root, "metadata", "sciRNA-seq.SCI024.oligos_2019-05-17.csv")
     parser.add_argument(
-        "--r1-annot", dest="r1_annotation_file", default=default,
-        help="CSV file with annotations of r1 barcodes. "
-             f"Defaults to '{default}'.")
+        "--r1-annot", dest="r1_annotation_file",
+        help="CSV file with annotations of r1 barcodes. ", required=True)
     parser.add_argument(
-        "--r1-attributes", dest="r1_attributes", nargs="+",
-        help="Which r1 attributes to annotate cells with.")
+        "--r1-attributes", dest="r1_attributes", type=str,
+        help="Which r1 attributes to annotate cells with. A comma-separated list.")
     default = os.path.join(root, "metadata", "737K-cratac-v1.reverse_complement.csv")
     parser.add_argument(
         "--r2-barcodes", dest="r2_barcodes", default=default,
@@ -103,6 +101,10 @@ def parse_args():
         args.sample_name = args.output_prefix
     if args.r1_attributes is None:
         args.r1_attributes = []
+    else:
+        args.r1_attributes = args.r1_attributes.split(",")
+    if not isinstance(args.r1_attributes, list):
+        raise ValueError("Incorrect r1_attributes. Got: '{}'".format(args.r1_attributes))
     args.save_intermediate = not args.no_save_intermediate
     args.output_header = not args.no_output_header
     if not args.output_prefix.endswith("."):
@@ -124,15 +126,17 @@ def main():
     global attrs
 
     args = parse_args()
+    print(f"# {time.asctime()} - CLI arguments:")
+    print(args)
 
     # barcode annotations
     annotation = pd.read_csv(args.r1_annotation_file)
     r2_barcodes = pd.read_csv(args.r2_barcodes)
     attrs = (
         annotation
-        .query(f"demultiplexing_name == '{args.sample_name}'")
-        .set_index("barcode_sequence")[args.r1_attributes]
-        .squeeze())
+        .query(f"sample_name == '{args.sample_name}'")
+        .set_index("combinatorial_barcode")[args.r1_attributes]
+        .squeeze(axis=0))
 
     # read text files
     df = parse_data(args.input_files, nrows=args.nrows)
@@ -147,20 +151,23 @@ def main():
     # Gather metrics per cell
     r1_annotation = None
     if "r1" in args.cell_barcodes:
-        r1_annotation = annotation.set_index("barcode_sequence")[args.r1_attributes]
+        r1_annotation = annotation.set_index("")[args.r1_attributes]
         r1_annotation.index.name = "r1"
     metrics = gather_stats_per_cell(
         df,
         r1_annotation=r1_annotation,
         species_mixture=args.species_mixture,
         save_intermediate=args.save_intermediate)
-
-    # Add required attributes
-    metrics = metrics.assign(**dict(zip(attrs.index, attrs.values)))
+    if "r1" not in args.cell_barcodes:
+        # Add required attributes
+        metrics = metrics.assign(**dict(zip(attrs.index, attrs.values)))
 
     # Save
     int_cols = ['read', 'unique_umis', 'umi', 'gene']
     metrics.loc[:, int_cols] = metrics.loc[:, int_cols].astype(int)
+    if not args.output_header:
+        print(f"# {time.asctime()} - Not outputing header in file, but header is the following:")
+        print(f"# {time.asctime()} - {metrics.columns}")
     (
         metrics
         .query(f"umi > {args.min_umi_output}")
@@ -170,12 +177,15 @@ def main():
         # # now the same only for exactly matching barcodes
         metrics_filtered = get_exact_matches(
             metrics,
-            r1_whitelist=annotation["barcode_sequence"],
+            r1_whitelist=annotation["combinatorial_barcode"],
             r2_whitelist=r2_barcodes[args.barcode_orientation],
             save_intermediate=args.save_intermediate,
             plot=not args.only_summary)
         metrics_filtered = metrics_filtered.assign(sample_name=args.sample_name, donor_id=args.sample_name.split("_")[-2], well=args.sample_name.split("_")[-1])
         metrics_filtered.loc[:, int_cols] = metrics_filtered.loc[:, int_cols].astype(int)
+        if not args.output_header:
+            print(f"# {time.asctime()} - Not outputing header in file, but header is the following:")
+            print(f"# {time.asctime()} - {metrics_filtered.columns}")
         (
             metrics_filtered
             .query(f"umi > {args.min_umi_output}")

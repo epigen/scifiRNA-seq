@@ -10,6 +10,7 @@ I decided not to keep all the code specific to each version/run, but simply to g
 
 |experiment|description|outcome|
 |-|-|-|
+|**PD190**|scifiRNA-seq - large cell number; species and cell line mixtures|Amazing quality|
 |**PD187/188**|scifiRNA-seq - new version|Amaaaazing!|
 |**SCI023/24**|scifiRNA-seq - T cells from 4 donors|Some problems remain|
 |**SCI022**|scifiRNA-seq - Mixture cells overtook primary cells; first 384 well experiment; learned a few things about going into primary cells; barcodes need further inspection|Failure|

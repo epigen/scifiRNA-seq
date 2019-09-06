@@ -64,6 +64,12 @@ echo "GTF FILE         = ${GTF_FILE}"
 echo "SLURM PARAMETERS = $CPUS, $MEM, $QUEUE, $TIME"
 
 # Don't edit from here
+
+# # Make path absolute
+if [[ ! "$BARCODE_ANNOTATION" = /* ]]; then
+    BARCODE_ANNOTATION=`pwd`/${BARCODE_ANNOTATION}
+fi
+
 mkdir -p $ROOT_OUTPUT_DIR
 cd $ROOT_OUTPUT_DIR
 LANES=`seq 1 $N_LANES`
@@ -80,11 +86,16 @@ mkdir -p $SAMPLE_DIR #/{logs,fastqc,mapped,barcodes,expression}
 JOB=${SAMPLE_DIR}/${JOB_NAME}.sh
 LOG=${SAMPLE_DIR}/${JOB_NAME}.log
 
+function join_by { local IFS="$1"; shift; echo "$*"; }
+
 if [[ $string == *"gRNA"* ]]; then
   INPUT_BAM=${SAMPLE_DIR}/${SAMPLE_NAME}.${LANE}.trimmed.bam
 fi
+
+# Here we provide input BAM files for all files multiplexed with different barcodes
 if [[ $string != *"gRNA"* ]]; then
-  INPUT_BAM=/scratch/users/dbarreca/private/custom_demux/scRNA/${FLOWCELL}/${FLOWCELL}_${LANE}_samples/${FLOWCELL}_${LANE}#${SAMPLE_NAME}.bam
+  INPUT_BAM=join_by , /scratch/users/dbarreca/private/custom_demux/scRNA/${FLOWCELL}/${FLOWCELL}_${LANE}_samples/${FLOWCELL}_${LANE}#${SAMPLE_NAME}_{01..04}.bam
+# Replace fixed {01..04} with range from arguments
 fi
 
 echo '#!/bin/env bash' > $JOB
