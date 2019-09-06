@@ -10,7 +10,7 @@ import matplotlib
 import seaborn as sns
 
 
-from scifi_utils import (
+from src.scifi_utils import (
     load_metrics,
     get_exact_matches,
     plot_efficiency,
