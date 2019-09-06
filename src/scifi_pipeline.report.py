@@ -102,14 +102,10 @@ def parse_args():
 
     # # Example:
     # args = parser.parse_args([
-    #     "/scratch/lab_bock/shared/projects/sci-rna/data/SCI024_Tcell_s/SCI024_Tcell_s.exon.metrics.csv.gz",
-    #     "results/SCI024_Tcell_s.exon.",
-    #     "--plotting-attributes", "plate,donor_id"])
-    args = parser.parse_args([
-        "/scratch/lab_bock/shared/projects/sci-rna/data/PD190_humanmouse/PD190_humanmouse.metrics.csv.gz",
-        "results/PD190_humanmouse.",
-        "--plotting-attributes", "plate_well"])
-    # args = parser.parse_args()
+    #     "/scratch/lab_bock/shared/projects/sci-rna/data/PD190_humanmouse/PD190_humanmouse.metrics.csv.gz",
+    #     "results/PD190_humanmouse.",
+    #     "--plotting-attributes", "plate_well"])
+    args = parser.parse_args()
 
     if args.plotting_attributes is None:
         args.plotting_attributes = list()
