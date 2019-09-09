@@ -7,8 +7,9 @@ import time
 
 import pandas as pd
 import matplotlib
+import matplotlib.pyplot as plt
 import seaborn as sns
-
+import numpy as np
 
 from src.scifi_utils import (
     load_metrics,
@@ -105,6 +106,10 @@ def parse_args():
     #     "/scratch/lab_bock/shared/projects/sci-rna/data/PD190_humanmouse/PD190_humanmouse.metrics.csv.gz",
     #     "results/PD190_humanmouse.",
     #     "--plotting-attributes", "plate_well"])
+    # args = parser.parse_args([
+    #     "/scratch/lab_bock/shared/projects/sci-rna/data/PD190_sixlines/PD190_sixlines.metrics.csv.gz",
+    #     "results/PD190_sixlines.",
+    #     "--plotting-attributes", "plate_well"])
     args = parser.parse_args()
 
     if args.plotting_attributes is None:
@@ -136,6 +141,7 @@ def main():
     t = int(args.expected_cell_number * 5)
     plot_efficiency(metrics, tail=t)
     plot_efficiency(metrics, tail=t, colour_by="unique_fraction")
+    plot_efficiency(metrics, keys=['unique_fraction'], log_scale=False, tail=t, suffix="reads_vs_unique")
 
     if args.species_mixture:
         plot_species_mixing(metrics)
@@ -145,10 +151,31 @@ def main():
         well_metrics = gather_stats_per_well(metrics, seq_content=True)
         plot_well_stats(well_metrics, tail=None, suffix="")
 
-        cells_per_droplet = metrics.groupby(args.droplet_column)[
+        cells_per_droplet = metrics.tail(args.expected_cell_number).groupby(args.droplet_column)[
             args.well_column
-        ].nunique()
+        ].nunique().sort_values()
+        cells_per_droplet.name = "cells_per_droplet"
         cells_per_droplet_stats(cells_per_droplet)
+
+        # Yield as a function of number of cells per droplet
+        m = metrics.tail(args.expected_cell_number).set_index("r2").join(cells_per_droplet).query("cells_per_droplet < 25")
+
+        attrs = [('read', True), ('umi', True), ('gene', True), ('unique_fraction', False)]
+        fig, axis = plt.subplots(len(attrs), 1, figsize=(9, 3 * len(attrs)))
+        for i, (attr, log) in enumerate(attrs):
+            sns.violinplot(m['cells_per_droplet'], m[attr], ax=axis[i])
+            if log:
+                axis[i].set_yscale("log")
+        fig.savefig(
+            args.output_prefix + f"cells_per_droplet.packaging_vs_yield.svg",
+            dpi=300, bbox_inches="tight")
+
+        # Species mixing plot based on round2 only
+        r2_metrics = metrics.groupby(args.droplet_column).agg(
+            {'human': np.sum, 'mouse': np.sum, 'total': np.sum,
+             'human_norm': np.sum, 'total_norm': np.sum,
+             'sp_ratio': np.mean, 'sp_ratio_norm': np.mean})
+        plot_species_mixing(r2_metrics, suffix="only_r2")
 
     # Barcode inspection
     if r2_barcodes is not None:

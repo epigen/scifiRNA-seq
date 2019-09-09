@@ -21,17 +21,19 @@ def parse_args():
     parser.add_argument(dest="input_h5ad")
     parser.add_argument(dest="output_prefix")
     parser.add_argument("--name", dest="name")
-    parser.add_argument("--r1-attributes", dest="r1_attributes", nargs="*")
+    parser.add_argument("--r1-attributes", dest="r1_attributes", type=str)
     parser.add_argument("--droplet-column", dest="droplet_column", default="r2")
     parser.add_argument("--well-column", dest="well_column", default="well")
     parser.add_argument("--species-mixture", dest="species_mixture", action="store_true")
 
     # Example:
     # args = parser.parse_args("--name SCI024_Tcell_s.exon.20190617. results/SCI024_Tcell_s.exon.h5ad results/SCI024_Tcell_s.exon.20190617. --r1-attributes donor_id".split(" "))
-    # args = parser.parse_args()
+    # args = parser.parse_args("--name PD190_sixlines. results/PD190_sixlines.h5ad results/PD190_sixlines. --species-mixture --r1-attributes plate_well,cell_line".split(" "))
+    args = parser.parse_args()
 
     if args.name is None:
         args.name = args.output_prefix
+    args.r1_attributes = args.r1_attributes.split(",")
     return args
 
 
@@ -40,9 +42,8 @@ def main():
     args = parse_args()
 
     # barcode annotations
-    annotation_file = os.path.join("metadata", "sciRNA-seq.SCI024.oligos_2019-05-17.csv")
+    annotation_file = os.path.join("metadata", "sciRNA-seq.PD190_sixlines.oligos_2019-09-05.csv")
     annotation = pd.read_csv(annotation_file)
-    droplet_barcode_file = os.path.join("metadata", "737K-cratac-v1.reverse_complement.csv")
 
     # convenience
     gene_set_libraries = [
@@ -56,63 +57,100 @@ def main():
     print(f"# {time.asctime()} - Reading input data.")
     adata = sc.read(args.input_h5ad, cache=True)
 
+    # Annotate with gene names instead of Ensembl IDs
+    print(f"# {time.asctime()} - Annotating genes.")
+    if args.species_mixture:
+        adata.var.loc[:, "species"] = pd.Series(
+            adata.var_names.str.startswith("ENSMUS"),
+            index=adata.var.index
+        ).replace(True, "mouse").replace(False, "human")
+    human_m = query_biomart(attributes=["ensembl_gene_id", "external_gene_name"], species="hsapiens", ensembl_version='grch38')
+    v = adata.var.join(human_m.set_index("ensembl_gene_id"))
+
+    if args.species_mixture:
+        mouse_m = query_biomart(attributes=["ensembl_gene_id", "external_gene_name"], species="mmusculus", ensembl_version='grcm38')
+        v.update(mouse_m.set_index("ensembl_gene_id"))
+    adata.var.index = v['external_gene_name'].fillna(v.index.to_series()).values
+    adata.var_names_make_unique()
+
+    # QC
+    # sc.pl.highest_expr_genes(a, n_top=20)
+    adata.var.loc[:, 'mito'] = adata.var_names.str.contains(r'^MT-', case=False)
+    adata.obs.loc[:, 'percent_mito'] = np.sum(
+        adata[:, adata.var['mito']].X, axis=1).A1 / np.sum(adata.X, axis=1).A1
+    adata.var.loc[:, 'ribo'] = adata.var_names.str.contains(r'^RP', case=False)
+    adata.obs.loc[:, 'percent_ribo'] = np.sum(
+        adata[:, adata.var['ribo']].X, axis=1).A1 / np.sum(adata.X, axis=1).A1
+    adata.obs.loc[:, 'n_counts'] = adata.X.sum(axis=1).A1
+    adata.obs.loc[:, 'log_counts'] = np.log10(adata.obs.loc[:, 'n_counts'])
+    adata.obs.loc[:, 'n_genes'] = (adata.X != 0).sum(1).A1
+
     # Filter
     print(f"# {time.asctime()} - Filtering.")
     sc.pp.filter_cells(
         adata, min_counts=100)
     sc.pp.filter_cells(
-        adata, max_counts=3000)
-    sc.pp.filter_genes(adata, min_counts=50)
-    sc.pp.filter_genes(adata, max_counts=5000)
+        adata, max_counts=8000)
+    sc.pp.filter_genes(adata, min_counts=20)
+    # sc.pp.filter_genes(adata, max_counts=5000)
     print(f"Kept {adata.shape[0]} cells and {adata.shape[1]} genes.")
+
+    # # remove cells with extreme mitochondial/ribosomal expression
+
+    # # visualize
+    # sc.pl.violin(adata, ['n_genes', 'n_counts', 'percent_mito', 'percent_ribo'], jitter=0.4, multi_panel=True)
 
     # Add experiment-specific variables
     print(f"# {time.asctime()} - Adding experiment-specific variables.")
-    info = adata.obs.index.to_series().str.split("-").apply(pd.Series)
-    info.columns = ['plate', 'well', 'droplet']
-    adata.obs = adata.obs.join(info)
-    adata.obs = pd.merge(
-        adata.obs.reset_index(),
-        annotation[['plate', 'plate_well', 'donor_id', 'sex']].drop_duplicates(),
-        left_on=["plate", "well"], right_on=["plate", "plate_well"], how="left").set_index("index").loc[adata.obs.index, :]
-    # # remove cells not matching annotation
-    # adata = adata[~adata.obs['donor_id'].isnull(), :]
+    # info = adata.obs.index.to_series().str.split("-").apply(pd.Series)
+    # info.columns = ['plate', 'well', 'droplet']
+    info = adata.obs.index.str.slice(0, 3)
+    adata.obs = adata.obs.assign(plate_well=info)
+    # remove cells not matching annotation
+    if adata.obs['plate_well'].isnull().sum() > 0:
+        print(f"# {time.asctime()} - Warning: not all cells matched plate_well annotation.")
+        adata = adata[~adata.obs['plate_well'].isnull(), :]
+    adata.obs = adata.obs.merge(annotation[args.r1_attributes], on=["plate_well"], validate='many_to_one').set_index(adata.obs.index)
 
-    # Annotate with gene names instead of Ensembl IDs
-    print(f"# {time.asctime()} - Annotating genes.")
-    m = query_biomart(attributes=["ensembl_gene_id", "external_gene_name"], ensembl_version='grch38')
-    v = adata.var.join(m.set_index("ensembl_gene_id"))
-    adata.var.index = v.external_gene_name.fillna(v.index.to_series()).values
-    adata.var_names_make_unique()
-
-    # QC
-    # sc.pl.highest_expr_genes(a, n_top=20)
-    adata.var.loc[:, 'mito'] = adata.var_names.str.startswith('MT-')
-    adata.obs.loc[:, 'percent_mito'] = np.sum(
-        adata[:, adata.var['mito']].X, axis=1).A1 / np.sum(adata.X, axis=1).A1
-    adata.obs.loc[:, 'n_counts'] = adata.X.sum(axis=1).A1
-    adata.obs.loc[:, 'log_counts'] = np.log10(adata.obs.loc[:, 'n_counts'])
-    adata.obs.loc[:, 'n_genes'] = (adata.X != 0).sum(1).A1
-    # sc.pl.violin(a, ['n_genes', 'n_counts', 'percent_mito'], jitter=0.4, multi_panel=True)
-    # # remove cells with exactly no mitochondial expression
-    if adata.obs.percent_mito.sum() > 0:
-        adata = adata[adata.obs['percent_mito'] > 0]
+    if args.r1_attributes == ['plate_well', 'cell_line']:
+        adata.obs = adata.obs.assign(
+            species=(adata.obs['cell_line'] == "3T3").replace(True, "mouse").replace(False, "human"))
 
     adata.X = adata.X.astype(np.float)
     adata.raw = adata
-    sc.write(args.name + "filtered.h5ad", adata)
-    adata = sc.read(args.name + "filtered.h5ad", cache=True)
+    sc.write(args.input_h5ad.replace(".h5ad", ".filtered.h5ad"), adata)
+    adata = sc.read(args.input_h5ad.replace(".h5ad", ".filtered.h5ad"), cache=True)
 
     a = adata.copy()
-    # gene_count = pd.Series(a.X.sum(0).A1, index=a.var.index)
+    # gene_count = pd.Series(a.X.sum(0).A1, index=a.var.index).sort_values()
 
     # Normalize
     sc.pp.normalize_per_cell(a)
     sc.pp.log1p(a)
 
+    sc.tl.rank_genes_groups(a, 'cell_line', method='t-test_overestim_var', n_genes=50, use_raw=False)
+    result = a.uns['rank_genes_groups']
+    groups = result['names'].dtype.names
+    diff = pd.DataFrame(
+        {group + '_' + key[:1]: result[key][group]
+            for group in groups for key in ['names', 'pvals', 'logfoldchanges', 'scores']})
+    diff.to_csv(args.output_prefix + "cell_line.cluster_comparison.top_values.csv", index=False)
+
+    from ngs_toolkit.general import enrichr
+
+    res = list()
+    for cell_line in diff.columns[diff.columns.str.endswith("_n")]:
+        res.append(
+            enrichr(
+                diff.rename(columns={cell_line: "gene_name"}),
+                gene_set_libraries=['ARCHS4_Cell-lines']).assign(cell_line=cell_line))
+    res = pd.concat(res)
+    g = res.set_index("description").groupby(['cell_line'])['combined_score'].nlargest(5)
+    print(g)
+
     # Reduce variables
-    sc.pp.highly_variable_genes(a, flavor="seurat", max_mean=0.1)  # , n_top_genes=100
-    # sc.pp.highly_variable_genes(a, flavor="cell_ranger", n_top_genes=100)
+    sc.pp.highly_variable_genes(a, flavor="seurat", min_disp=1, max_mean=1)  # , n_top_genes=100
+    # sc.pp.highly_variable_genes(a, flavor="cell_ranger", n_top_genes=100, batch_key="species")  # , n_top_genes=100
     sc.pl.highly_variable_genes(a)
 
     # sc.pp.scale(a)
@@ -127,16 +165,17 @@ def main():
     sc.pl.pca_variance_ratio(a, log=True)
 
     # Manifold
-    sc.pp.neighbors(a, use_rep="X_pca", n_neighbors=20, metric="correlation")
+    # sc.pp.neighbors(a, use_rep="X_pca", n_neighbors=20, metric="correlation")
+    sc.pp.neighbors(a, use_rep="X_pca", n_neighbors=20)
     sc.tl.umap(a)
     sc.tl.diffmap(a)
 
     # Cluster
-    sc.tl.leiden(a, resolution=0.01)
+    sc.tl.leiden(a, resolution=0.3)
     sc.pl.umap(
-        a, color=['leiden', 'donor_id', 'log_counts'], palette='tab20c', save=args.name + "leiden.cells_per_cluster.svg")
+        a, color=['leiden', 'log_counts'], palette='tab20c', save=args.name + "leiden.cells_per_cluster.svg")
     sc.pl.diffmap(
-        a, color=['leiden', 'donor_id', 'log_counts'], palette='tab20c', save=args.name + "leiden.cells_per_cluster.svg")
+        a, color=['leiden', 'log_counts'], palette='tab20c', save=args.name + "leiden.cells_per_cluster.svg")
 
     a.uns['iroot'] = np.argmin(a.obsm['X_diffmap'][0])
     sc.tl.dpt(a, n_branchings=2)
@@ -274,6 +313,7 @@ def main():
     # # sc.pl.pca(a, color=['leiden', 'donor_id', 'log_counts'])
     # sc.pl.umap(a, color=['leiden', 'donor_id', 'log_counts'], save=output_prefix + "umap.leiden.svg")
     # sc.pl.umap(a, color=['leiden', 'donor_id', 'log_counts'] + available, save=output_prefix + "umap.leiden_markers.svg")
+
 
 if __name__ == "__main__":
     sns.set(context="paper", style="ticks", palette="colorblind", color_codes=True)

@@ -95,8 +95,22 @@ def parse_args():
     #     "--no-save-intermediate",
     #     "--min-umi-output", "20",
     #     "--no-output-header",
-    #     "/scratch/lab_bock/shared/projects/sci-rna/data/SCI024_Tcell_s/SCI023_Tcell_D77_A01/SCI023_Tcell_D77_A01.*.STAR.Aligned.out.exon.bam.featureCounts.bam",
+    #     "/scratch/lab_bock/shared/projects/sci-rna/data/SCI024_Tcell_s/SCI023_Tcell_D77_A01/SCI023_Tcell_D77_A01.*.STAR.Aligned.out.bam.featureCounts.bam",
     #     "/scratch/lab_bock/shared/projects/sci-rna/data/SCI024_Tcell_s/SCI023_Tcell_D77_A01/SCI023_Tcell_D77_A01"])
+
+    # Example run:
+    # args = parser.parse_args([
+    #     "--sample-name", "PD190_humanmouse",
+    #     "--r1-annot", "metadata/sciRNA-seq.PD190_sixlines.oligos_2019-09-05.csv",
+    #     "--r1-attributes", "plate_well",
+    #     "--cell-barcodes", "r2",
+    #     "--only-summary",
+    #     "--no-save-intermediate",
+    #     "--min-umi-output", "20",
+    #     "--no-output-header",
+    #     "/scratch/lab_bock/shared/projects/sci-rna/data/PD190_humanmouse/PD190_humanmouse_*/*.STAR.Aligned.out.bam.featureCounts.bam",
+    #     "/scratch/lab_bock/shared/projects/sci-rna/data/PD190_humanmouse/PD190_humanmouse"])
+
     if args.sample_name is None:
         args.sample_name = args.output_prefix
     if args.r1_attributes is None:
@@ -140,6 +154,8 @@ def main():
 
     # read text files
     df = parse_data(args.input_files, nrows=args.nrows)
+    print(f"# {time.asctime()} - Saving all reads to pickle.")
+    to_pickle(df, "df", array=False)
 
     nr = df.isnull().sum().sum()
     if nr > 0:

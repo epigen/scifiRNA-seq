@@ -70,8 +70,8 @@ echo "" >> $JOB
 echo "find .  -mindepth 2 -name '*.metrics.csv.gz' ! -name '*exon*' -exec cat {} \; > ${ROOT_OUTPUT_DIR}/${RUN_NAME}.metrics.csv.gz" >> $JOB
 echo "echo 'r2,read,unique_umi,umi,gene,$ADDITIONAL_FIELDS' > ${RUN_NAME}_header1" >> $JOB
 echo "gzip ${RUN_NAME}_header1" >> $JOB
-echo "cat ${RUN_NAME}_header1.gz ${ROOT_OUTPUT_DIR}/${RUN_NAME}.metrics.csv.gz > tmp1" >> $JOB
-echo "mv tmp1 ${ROOT_OUTPUT_DIR}/${RUN_NAME}.metrics.csv.gz" >> $JOB
+echo "cat ${RUN_NAME}_header1.gz ${ROOT_OUTPUT_DIR}/${RUN_NAME}.metrics.csv.gz > ${RUN_NAME}_tmp1" >> $JOB
+echo "mv ${RUN_NAME}_tmp1 ${ROOT_OUTPUT_DIR}/${RUN_NAME}.metrics.csv.gz" >> $JOB
 echo "rm ${RUN_NAME}_header1.gz" >> $JOB
 echo "" >> $JOB
 echo "date" >> $JOB
@@ -90,8 +90,8 @@ echo "" >> $JOB
 echo "find .  -mindepth 2 -name '*.expression.csv.gz' ! -name '*exon*' -exec cat {} \; > ${ROOT_OUTPUT_DIR}/${RUN_NAME}.expression.csv.gz" >> $JOB
 echo "echo 'r2,gene,umi,$VARIABLES' > ${RUN_NAME}_header2" >> $JOB
 echo "gzip ${RUN_NAME}_header2" >> $JOB
-echo "cat ${RUN_NAME}_header2.gz ${ROOT_OUTPUT_DIR}/${RUN_NAME}.expression.csv.gz > tmp2" >> $JOB
-echo "mv tmp2 ${ROOT_OUTPUT_DIR}/${RUN_NAME}.expression.csv.gz" >> $JOB
+echo "cat ${RUN_NAME}_header2.gz ${ROOT_OUTPUT_DIR}/${RUN_NAME}.expression.csv.gz > ${RUN_NAME}_tmp2" >> $JOB
+echo "mv ${RUN_NAME}_tmp2 ${ROOT_OUTPUT_DIR}/${RUN_NAME}.expression.csv.gz" >> $JOB
 echo "rm ${RUN_NAME}_header2.gz" >> $JOB
 echo "" >> $JOB
 echo "date" >> $JOB
@@ -110,8 +110,8 @@ echo "" >> $JOB
 echo "find .  -mindepth 2 -name '*.exon.metrics.csv.gz' -exec cat {} \; > ${ROOT_OUTPUT_DIR}/${RUN_NAME}.exon.metrics.csv.gz" >> $JOB
 echo "echo 'r2,read,unique_umi,umi,gene,$ADDITIONAL_FIELDS' > ${RUN_NAME}_header3" >> $JOB
 echo "gzip ${RUN_NAME}_header3" >> $JOB
-echo "cat ${RUN_NAME}_header3.gz ${ROOT_OUTPUT_DIR}/${RUN_NAME}.exon.metrics.csv.gz > tmp1" >> $JOB
-echo "mv tmp1 ${ROOT_OUTPUT_DIR}/${RUN_NAME}.exon.metrics.csv.gz" >> $JOB
+echo "cat ${RUN_NAME}_header3.gz ${ROOT_OUTPUT_DIR}/${RUN_NAME}.exon.metrics.csv.gz > ${RUN_NAME}_tmp3" >> $JOB
+echo "mv ${RUN_NAME}_tmp3 ${ROOT_OUTPUT_DIR}/${RUN_NAME}.exon.metrics.csv.gz" >> $JOB
 echo "rm ${RUN_NAME}_header3.gz" >> $JOB
 echo "" >> $JOB
 echo "date" >> $JOB
@@ -130,8 +130,8 @@ echo "" >> $JOB
 echo "find .  -mindepth 2 -name '*.exon.expression.csv.gz' -exec cat {} \; > ${ROOT_OUTPUT_DIR}/${RUN_NAME}.exon.expression.csv.gz" >> $JOB
 echo "echo 'r2,gene,umi,$VARIABLES' > ${RUN_NAME}_header4" >> $JOB
 echo "gzip ${RUN_NAME}_header4" >> $JOB
-echo "cat ${RUN_NAME}_header4.gz ${ROOT_OUTPUT_DIR}/${RUN_NAME}.exon.expression.csv.gz > tmp2" >> $JOB
-echo "mv tmp2 ${ROOT_OUTPUT_DIR}/${RUN_NAME}.exon.expression.csv.gz" >> $JOB
+echo "cat ${RUN_NAME}_header4.gz ${ROOT_OUTPUT_DIR}/${RUN_NAME}.exon.expression.csv.gz > ${RUN_NAME}_tmp4" >> $JOB
+echo "mv ${RUN_NAME}_tmp4 ${ROOT_OUTPUT_DIR}/${RUN_NAME}.exon.expression.csv.gz" >> $JOB
 echo "rm ${RUN_NAME}_header4.gz" >> $JOB
 echo "" >> $JOB
 echo "date" >> $JOB

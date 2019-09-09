@@ -30,13 +30,7 @@ def write_gene_expression_matrix(expr, output_file=None, file_format="h5ad"):
         expr = expr.dropna(subset=['umi'])
 
     print(f"# {time.asctime()} - Adding cell label.")
-
-    if all([x in expr.columns for x in ['plate_column', 'well_column', 'droplet_column']]):
-        cell = expr[args.plate_column] + '-' + expr[args.well_column] + '-' + expr[args.droplet_column]
-    else:
-        cell = expr[args.droplet_column]
-
-    expr = expr.assign(cell=cell)
+    expr = expr.assign(cell=expr['plate_well'] + "-" + expr[args.droplet_column])
     print(f"# {time.asctime()} - Factorizing cells and genes.")
     cell, unique_cell = expr['cell'].factorize()
     gene, unique_gene = expr['gene'].factorize()

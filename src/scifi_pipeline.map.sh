@@ -94,7 +94,7 @@ fi
 
 # Here we provide input BAM files for all files multiplexed with different barcodes
 if [[ $string != *"gRNA"* ]]; then
-  INPUT_BAM=join_by , /scratch/users/dbarreca/private/custom_demux/scRNA/${FLOWCELL}/${FLOWCELL}_${LANE}_samples/${FLOWCELL}_${LANE}#${SAMPLE_NAME}_{01..04}.bam
+  INPUT_BAM=`join_by , /scratch/users/dbarreca/private/custom_demux/scRNA/${FLOWCELL}/${FLOWCELL}_${LANE}_samples/${FLOWCELL}_${LANE}#${SAMPLE_NAME}_{01..04}.bam`
 # Replace fixed {01..04} with range from arguments
 fi
 
