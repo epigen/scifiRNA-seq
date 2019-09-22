@@ -13,6 +13,7 @@ parse:
 ANNOTATION ?= "/scratch/lab_bock/shared/projects/sci-rna/metadata/sciRNA-seq.PD190_humanmouse.oligos_2019-09-05.csv"
 ROOT_OUTPUT_DIR ?= /scratch/lab_bock/shared/projects/sci-rna/data/$(RUN_NAME)
 VARIABLES ?= "plate_well"
+ARRAY_SIZE ?= 24
 SPECIES_MIXING ?= 1
 SP := 
 ifeq ($(SPECIES_MIXING), 1)
@@ -43,10 +44,11 @@ map: parse
 	--n-lanes=$(N_LANES) \
 	--n-barcodes=$(N_BARCODES) \
 	--annotation=$(ANNOTATION) \
-	--cpus=1 \
-	--mem=80000 \
-	--queue=longq \
-	--time=00:30:00 \
+	--cpus=4 \
+	--mem=60000 \
+	--queue=shortq \
+	--time=08:00:00 \
+	--array-size=$(ARRAY_SIZE) \
 	--output-dir=$(ROOT_OUTPUT_DIR) \
 	--star-exe=$(STAR_EXE) \
 	--star-dir=$(STAR_DIR) \

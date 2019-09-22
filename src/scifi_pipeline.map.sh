@@ -55,6 +55,10 @@ case $i in
     TIME="${i#*=}"
     shift # past argument=value
     ;;
+    --array-size=*)
+    ARRAY_SIZE="${i#*=}"
+    shift # past argument=value
+    ;;
     *)
           # unknown option
     ;;
@@ -70,10 +74,9 @@ echo "ROOT DIRECTORY   = ${ROOT_OUTPUT_DIR}"
 echo "STAR EXECUTABLE  = ${STAR_EXE}"
 echo "STAR DIRECTORY   = ${STAR_DIR}"
 echo "GTF FILE         = ${GTF_FILE}"
-echo "SLURM PARAMETERS = $CPUS, $MEM, $QUEUE, $TIME"
+echo "SLURM PARAMETERS = $CPUS, $MEM, $QUEUE, $TIME $ARRAY_SIZE"
 
-# Don't edit from here
-
+# Make paths absolute
 if [[ ! "$BARCODE_ANNOTATION" = /* ]]; then
     BARCODE_ANNOTATION=`pwd`/${BARCODE_ANNOTATION}
 fi
@@ -83,19 +86,21 @@ cd $ROOT_OUTPUT_DIR
 LANES=`seq 1 $N_LANES`
 
 
+ARRAY_FILE=${ROOT_OUTPUT_DIR}/${RUN_NAME}.array_file.txt
+
 # # unfortunatelly, even though STAR can output to stdout 
 # # and featureCounts read from stdin, one cannot pipe them as 
 # # featureCounts does not support detailed BAM output with stdin
 for SAMPLE_NAME in `tail -n +2 $BARCODE_ANNOTATION | cut -d , -f 1`; do
 
-# for LANE in ${LANES[@]}; do
+# prepare output directory
 SAMPLE_DIR=${ROOT_OUTPUT_DIR}/${SAMPLE_NAME}
-mkdir -p $SAMPLE_DIR #/{logs,fastqc,mapped,barcodes,expression}
+mkdir -p $SAMPLE_DIR
 
 function join_by { local IFS="$1"; shift; echo "$*"; }
 
 if [[ $string == *"gRNA"* ]]; then
-    INPUT_BAM=${SAMPLE_DIR}/${SAMPLE_NAME}.${LANE}.trimmed.bam
+    INPUT_BAM=${PREFIX}.trimmed.bam
 else
     BAMS=()
     DIR=/scratch/users/dbarreca/private/custom_demux/scRNA/${FLOWCELL}
@@ -113,17 +118,26 @@ else
     LANE="ALL"
 fi
 
+# Add a line for each sample to array file
+PREFIX=${SAMPLE_DIR}/${SAMPLE_NAME}.${LANE}
 INPUT_BAM=`join_by , ${BAMS[@]}`
+echo $PREFIX $INPUT_BAM >> $ARRAY_FILE
 
+done
 
-JOB_NAME=scifi_pipeline.${SAMPLE_NAME}.${LANE}.map
-JOB=${SAMPLE_DIR}/${JOB_NAME}.sh
-LOG=${SAMPLE_DIR}/${JOB_NAME}.log
+# Now submit job array in steps
+TOTAL=`tail -n +2 $BARCODE_ANNOTATION | wc -l`
+for i in `seq 0 $ARRAY_SIZE $((TOTAL - 1))`; do
+ARRAY="${i}-$((i + ARRAY_SIZE - 1))"
+
+JOB_NAME=scifi_pipeline.${RUN_NAME}.${ARRAY}.map
+JOB=${ROOT_OUTPUT_DIR}/${JOB_NAME}.sh
+LOG=${ROOT_OUTPUT_DIR}/${JOB_NAME}.%a.log
 
 echo '#!/bin/env bash' > $JOB
 
 echo "date" >> $JOB
-echo "" >> $JOB
+echo '' >> $JOB
 
 echo "#RUN_NAME         = ${RUN_NAME}" >> $JOB
 echo "#FLOWCELL         = ${FLOWCELL}" >> $JOB
@@ -134,64 +148,74 @@ echo "#ROOT DIRECTORY   = ${ROOT_OUTPUT_DIR}" >> $JOB
 echo "#STAR EXECUTABLE  = ${STAR_EXE}" >> $JOB
 echo "#STAR DIRECTORY   = ${STAR_DIR}" >> $JOB
 echo "#GTF FILE         = ${GTF_FILE}" >> $JOB
-echo "#SLURM PARAMETERS = $CPUS, $MEM, $QUEUE, $TIME" >> $JOB
+echo "#SLURM PARAMETERS = $CPUS, $MEM, $QUEUE, $TIME, $ARRAY_SIZE" >> $JOB
+echo '' >> $JOB
+echo 'echo SLURM_ARRAY_TASK_ID = $SLURM_ARRAY_TASK_ID' >> $JOB
+echo '' >> $JOB
 
+# Get respective line of input
+echo "ARRAY_FILE=$ARRAY_FILE" >> $JOB
+echo 'readarray -t ARR < $ARRAY_FILE' >> $JOB
+echo 'IFS=" " read -r -a F <<< ${ARR[$SLURM_ARRAY_TASK_ID]}' >> $JOB
+echo 'PREFIX=${F[0]}' >> $JOB
+echo 'INPUT_BAM=${F[1]}' >> $JOB
 
 # align with STAR >=2.7.0e
-echo "" >> $JOB
-echo "$STAR_EXE \
---runThreadN $CPUS \
---genomeDir $STAR_DIR \
---clip3pAdapterSeq AAAAAA \
---outSAMprimaryFlag AllBestScore \
---outSAMattributes All \
---outFilterScoreMinOverLread 0 --outFilterMatchNminOverLread 0 --outFilterMatchNmin 0 \
---outSAMunmapped Within \
---outFileNamePrefix ${SAMPLE_DIR}/${SAMPLE_NAME}.${LANE}.STAR. \
---outSAMtype BAM Unsorted \
---readFilesType SAM SE \
---readFilesCommand samtools view -h \
---readFilesIn $INPUT_BAM" >> $JOB
+echo '' >> $JOB
+echo "$STAR_EXE \\
+--runThreadN $CPUS \\
+--genomeDir $STAR_DIR \\
+--clip3pAdapterSeq AAAAAA \\
+--outSAMprimaryFlag AllBestScore \\
+--outSAMattributes All \\
+--outFilterScoreMinOverLread 0 --outFilterMatchNminOverLread 0 --outFilterMatchNmin 0 \\
+--outSAMunmapped Within \\
+--outSAMtype BAM Unsorted \\
+--readFilesType SAM SE \\
+--readFilesCommand samtools view -h \\" >> $JOB
+echo '--outFileNamePrefix ${PREFIX}.STAR. \
+--readFilesIn $INPUT_BAM' >> $JOB
 
 # count all reads overlapping a gene
-echo "" >> $JOB
-echo "featureCounts \
--T $CPUS \
--F GTF \
--t gene \
--g gene_id \
---extraAttributes gene_name \
--Q 30 \
--s 0 \
--R BAM \
--a $GTF_FILE \
--o ${SAMPLE_DIR}/${SAMPLE_NAME}.${LANE}.STAR.featureCounts.quant_gene.tsv \
-${SAMPLE_DIR}/${SAMPLE_NAME}.${LANE}.STAR.Aligned.out.bam" >> $JOB
+echo '' >> $JOB
+echo "featureCounts \\
+-T $CPUS \\
+-F GTF \\
+-t gene \\
+-g gene_id \\
+--extraAttributes gene_name \\
+-Q 30 \\
+-s 0 \\
+-R BAM \\
+-a $GTF_FILE \\" >> $JOB
+echo '-o ${PREFIX}.STAR.featureCounts.quant_gene.tsv \
+${PREFIX}.STAR.Aligned.out.bam' >> $JOB
 
 # Same as above but just for exons
-echo "" >> $JOB
-echo "ln -s ${SAMPLE_DIR}/${SAMPLE_NAME}.${LANE}.STAR.Aligned.out.bam \
-${SAMPLE_DIR}/${SAMPLE_NAME}.${LANE}.STAR.Aligned.out.exon.bam" >> $JOB
-echo "featureCounts \
--T $CPUS \
--F GTF \
--t exon \
--g gene_id \
---extraAttributes gene_name \
--Q 30 \
--s 0 \
--R BAM \
--a $GTF_FILE \
--o ${SAMPLE_DIR}/${SAMPLE_NAME}.${LANE}.STAR.featureCounts.quant_gene.exon.tsv \
-${SAMPLE_DIR}/${SAMPLE_NAME}.${LANE}.STAR.Aligned.out.exon.bam" >> $JOB
+echo '' >> $JOB
+echo 'ln -s ${PREFIX}.STAR.Aligned.out.bam \
+${PREFIX}.STAR.Aligned.out.exon.bam' >> $JOB
+echo "featureCounts \\
+-T $CPUS \\
+-F GTF \\
+-t exon \\
+-g gene_id \\
+--extraAttributes gene_name \\
+-Q 30 \\
+-s 0 \\
+-R BAM \\
+-a $GTF_FILE \\" >> $JOB
+echo '-o ${PREFIX}.STAR.featureCounts.quant_gene.exon.tsv \
+${PREFIX}.STAR.Aligned.out.exon.bam' >> $JOB
 
-echo "" >> $JOB
+echo '' >> $JOB
 echo "date" >> $JOB
-echo "" >> $JOB
+echo '' >> $JOB
 
 sbatch -J $JOB_NAME \
 -o $LOG --time $TIME \
 -c $CPUS --mem $MEM -p $QUEUE \
+--array=$ARRAY -N 1 \
 $JOB
 
 # done
