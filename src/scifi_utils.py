@@ -460,7 +460,10 @@ def get_exact_matches(
     for i, barcode in enumerate(barcodes):
         if whitelists[i] is None:
             continue
-        match = metrics.index.get_level_values(barcode).isin(whitelists[i].tolist())
+        if isinstance(metrics.index, pd.MultiIndex):
+            match = metrics.index.get_level_values(barcode).isin(whitelists[i].tolist())
+        else:
+            match = metrics[barcode].isin(whitelists[i].tolist())
 
         print(f"{barcode} barcode matching rate: {match.sum() / match.shape[0]}")
         print(f"{barcode} read matching rate: {metrics.loc[match, 'read'].sum() / metrics['read'].sum()}")
@@ -761,3 +764,38 @@ def parallel_groupby_apply(df, levels, function):
     g = df.groupby(levels)
     res = Parallel(n_jobs=multiprocessing.cpu_count())(delayed(function)(group) for name, group in g)
     return pd.concat(res)
+
+
+def get_full_files(cell_barcodes=['r2'], doublet_threshold=0.85):
+    from glob import glob
+    import re
+
+    fs = sorted(glob("data/PD190_humanmouse/*/*pickle"))
+    res = list()
+    for f in fs:
+        well = re.sub(r".*_(...)\.df\.pickle", r"\1", f)
+        print(well)
+        res.append(pickle.load(open(f, 'rb')).assign(well=well))
+
+    df = pd.concat(res)
+    umi_counts = df.groupby(cell_barcodes + ['gene', 'pos'], sort=False)['umi'].nunique()
+    print(f"# {time.asctime()} - Gathering species-specific metrics per cell.")
+    umi_counts2 = umi_counts.reset_index()
+    umi_counts2 = (
+        umi_counts2
+        .assign(
+            species=(
+                umi_counts2['gene'].str.startswith("ENSG")
+                .replace(True, "human").replace(False, "mouse"))))
+    species_counts = umi_counts2.groupby(cell_barcodes + ['species'])['umi'].sum()
+
+    spc = species_counts.reset_index().pivot_table(
+        index=cell_barcodes, columns='species', values='umi', fill_value=0)
+    spc += 1
+    spc = spc.assign(total=spc.sum(1), max=spc.max(1))
+    spc = (
+        spc.assign(
+            ratio=spc["max"] / spc['total'],
+            sp_ratio=spc["human"] / spc['total'])
+        .sort_values("total"))
+    spc = spc.assign(doublet=(spc['ratio'] < doublet_threshold).astype(int).replace(0, -1))

@@ -11,6 +11,11 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 
+
+if os.path.exists("/home/arendeiro/sci-rna"):
+    sys.path.insert(0, "/home/arendeiro/sci-rna")
+
+
 from src.scifi_utils import (
     load_metrics,
     get_exact_matches,
@@ -170,12 +175,13 @@ def main():
             args.output_prefix + f"cells_per_droplet.packaging_vs_yield.svg",
             dpi=300, bbox_inches="tight")
 
-        # Species mixing plot based on round2 only
-        r2_metrics = metrics.groupby(args.droplet_column).agg(
-            {'human': np.sum, 'mouse': np.sum, 'total': np.sum,
-             'human_norm': np.sum, 'total_norm': np.sum,
-             'sp_ratio': np.mean, 'sp_ratio_norm': np.mean})
-        plot_species_mixing(r2_metrics, suffix="only_r2")
+        if args.species_mixture:
+            # Species mixing plot based on round2 only
+            r2_metrics = metrics.groupby(args.droplet_column).agg(
+                {'human': np.sum, 'mouse': np.sum, 'total': np.sum,
+                 'human_norm': np.sum, 'total_norm': np.sum,
+                 'sp_ratio': np.mean, 'sp_ratio_norm': np.mean})
+            plot_species_mixing(r2_metrics, suffix="only_r2")
 
     # Barcode inspection
     if r2_barcodes is not None:

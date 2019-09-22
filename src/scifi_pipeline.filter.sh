@@ -114,6 +114,7 @@ echo "date" >> $JOB
 echo "" >> $JOB
 echo "python3 -u $SUMMARIZER \
 --sample-name $SAMPLE_NAME \
+--r1-annot $BARCODE_ANNOTATION \
 --r1-attributes $VARIABLES \
 --cell-barcodes r2 \
 --only-summary \
