@@ -12,6 +12,8 @@ parse:
 	@[ "${N_BARCODES}" ] || ( echo "'N_BARCODES' is not set"; exit 1 )
 ANNOTATION ?= "/scratch/lab_bock/shared/projects/sci-rna/metadata/sciRNA-seq.PD190_humanmouse.oligos_2019-09-05.csv"
 ROOT_OUTPUT_DIR ?= /scratch/lab_bock/shared/projects/sci-rna/data/$(RUN_NAME)
+EXPECTED_CELL_NUMBER ?= 200000
+MIN_UMI_OUTPUT ?= 3
 VARIABLES ?= "plate_well"
 ARRAY_SIZE ?= 24
 SPECIES_MIXING ?= 1
@@ -61,12 +63,15 @@ filter: parse
 	--run-name=$(RUN_NAME) \
 	--output-dir=$(ROOT_OUTPUT_DIR) \
 	--annotation=$(ANNOTATION) \
+	--expected-cell-number=$(EXPECTED_CELL_NUMBER) \
+	--min-umi-output=${MIN_UMI_OUTPUT} \
 	--variables=$(VARIABLES) \
 	--species-mixture=$(SPECIES_MIXING) \
 	--cpus=1 \
 	--mem=8000 \
 	--queue=longq \
-	--time=08:00:00
+	--time=08:00:00 \
+	--array-size=$(ARRAY_SIZE)
 	$(info "scifi_pipeline: done")
 
 join: parse
@@ -85,20 +90,22 @@ join: parse
 report: parse
 	$(info "scifi_pipeline: report")
 
-	sbatch -J scifiRNA-seq.$(RUN_NAME).report \
-	-o $(ROOT_OUTPUT_DIR)/$(RUN_NAME).report.log \
-	-p longq --mem 120000 --cpus 2 \
+	mkdir -p results/$(RUN_NAME)
+
+	sbatch -J scifi_pipeline.$(RUN_NAME).report \
+	-o $(ROOT_OUTPUT_DIR)/scifi_pipeline.$(RUN_NAME).report.log \
+	-p longq --mem 120000 --cpus 4 --time 3-00:00:00 \
 	--wrap "python3 -u src/scifi_pipeline.report.py \
 	$(ROOT_OUTPUT_DIR)/$(RUN_NAME).metrics.csv.gz \
-	results/$(RUN_NAME). \
+	results/$(RUN_NAME)/$(RUN_NAME). \
 	--plotting-attributes $(VARIABLES) $(SP)"
 
-	sbatch -J scifiRNA-seq.$(RUN_NAME).report-exon \
-	-o $(ROOT_OUTPUT_DIR)/$(RUN_NAME).report-exon.log \
-	-p longq --mem 120000 --cpus 2 \
+	sbatch -J scifi_pipeline.$(RUN_NAME).report-exon \
+	-o $(ROOT_OUTPUT_DIR)/scifi_pipeline.$(RUN_NAME).report-exon.log \
+	-p longq --mem 120000 --cpus 4 --time 3-00:00:00 \
 	--wrap "python3 -u src/scifi_pipeline.report.py \
 	$(ROOT_OUTPUT_DIR)/$(RUN_NAME).exon.metrics.csv.gz \
-	results/$(RUN_NAME).exon. \
+	results/$(RUN_NAME)/$(RUN_NAME).exon. \
 	--plotting-attributes $(VARIABLES) $(SP)"
 	$(info "scifi_pipeline: done")
 

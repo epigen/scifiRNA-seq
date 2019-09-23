@@ -11,6 +11,14 @@ case $i in
     BARCODE_ANNOTATION="${i#*=}"
     shift # past argument=value
     ;;
+    --expected-cell-number=*)
+    EXPECTED_CELL_NUMBER="${i#*=}"
+    shift # past argument=value
+    ;;
+    --min-umi-output=*)
+    MIN_UMI_OUTPUT="${i#*=}"
+    shift # past argument=value
+    ;;
     -v=*|--variables=*)
     VARIABLES="${i#*=}"
     shift # past argument=value
@@ -39,6 +47,10 @@ case $i in
     TIME="${i#*=}"
     shift # past argument=value
     ;;
+    --array-size=*)
+    ARRAY_SIZE="${i#*=}"
+    shift # past argument=value
+    ;;
     *)
           # unknown option
     ;;
@@ -50,7 +62,7 @@ echo "BARCODE_ANNOTATION = ${BARCODE_ANNOTATION}"
 echo "VARIABLES        = ${VARIABLES}"
 echo "SPECIES_MIXTURE  = ${SPECIES_MIXTURE}"
 echo "ROOT DIRECTORY   = ${ROOT_OUTPUT_DIR}"
-echo "SLURM PARAMETERS = $CPUS, $MEM, $QUEUE, $TIME"
+echo "SLURM PARAMETERS = $CPUS, $MEM, $QUEUE, $TIME, $ARRAY_SIZE"
 
 # Start
 
@@ -71,66 +83,89 @@ mkdir -p $ROOT_OUTPUT_DIR
 cd $ROOT_OUTPUT_DIR
 
 
-# Summarize across lanes
+# Add a line for each sample to array file
+ARRAY_FILE=${ROOT_OUTPUT_DIR}/scifi_pipeline.${RUN_NAME}.filter.array_file.txt
 for SAMPLE_NAME in `tail -n +2 $BARCODE_ANNOTATION | cut -d , -f 1`; do
-JOB_NAME=scifi_pipeline.${SAMPLE_NAME}.summarize
 SAMPLE_DIR=${ROOT_OUTPUT_DIR}/${SAMPLE_NAME}
-JOB=${SAMPLE_DIR}/${JOB_NAME}.sh
-LOG=${SAMPLE_DIR}/${JOB_NAME}.log
+echo $SAMPLE_NAME $SAMPLE_DIR >> $ARRAY_FILE
+done
+
+
+# Now submit job array in steps
+TOTAL=`tail -n +2 $BARCODE_ANNOTATION | wc -l`
+for i in `seq 0 $ARRAY_SIZE $((TOTAL - 1))`; do
+ARRAY="${i}-$((i + ARRAY_SIZE - 1))"
+
+JOB_NAME=scifi_pipeline.${RUN_NAME}.filter.${ARRAY}
+JOB=${ROOT_OUTPUT_DIR}/${JOB_NAME}.sh
+LOG=${ROOT_OUTPUT_DIR}/${JOB_NAME}.%a.log
 
 echo '#!/bin/env bash' > $JOB
-echo "date" >> $JOB
-echo "" >> $JOB
-echo "python3 -u $SUMMARIZER \
---sample-name $SAMPLE_NAME \
---r1-annot $BARCODE_ANNOTATION \
---r1-attributes $VARIABLES \
---cell-barcodes r2 \
---only-summary \
---no-save-intermediate \
---min-umi-output 20 \
---no-output-header \
---save-gene-expression \
-$ADDITIONAL_ARGS \
+echo 'date' >> $JOB
+echo '' >> $JOB
+
+echo "#RUN_NAME         = ${RUN_NAME}" >> $JOB
+echo "#FLOWCELL         = ${FLOWCELL}" >> $JOB
+echo "#NUMBER OF LANES  = ${N_LANES}" >> $JOB
+echo "#BARCODE NUMBER   = ${N_BARCODES}" >> $JOB
+echo "#ANNOTATION       = ${BARCODE_ANNOTATION}" >> $JOB
+echo "#ROOT DIRECTORY   = ${ROOT_OUTPUT_DIR}" >> $JOB
+echo "#STAR EXECUTABLE  = ${STAR_EXE}" >> $JOB
+echo "#STAR DIRECTORY   = ${STAR_DIR}" >> $JOB
+echo "#GTF FILE         = ${GTF_FILE}" >> $JOB
+echo "#SLURM PARAMETERS = $CPUS, $MEM, $QUEUE, $TIME, $ARRAY_SIZE" >> $JOB
+echo '' >> $JOB
+echo 'echo SLURM_ARRAY_TASK_ID = $SLURM_ARRAY_TASK_ID' >> $JOB
+echo '' >> $JOB
+
+# Get respective line of input
+echo "ARRAY_FILE=$ARRAY_FILE" >> $JOB
+echo 'readarray -t ARR < $ARRAY_FILE' >> $JOB
+echo 'IFS=" " read -r -a F <<< ${ARR[$SLURM_ARRAY_TASK_ID]}' >> $JOB
+echo 'SAMPLE_NAME=${F[0]}' >> $JOB
+echo 'SAMPLE_DIR=${F[1]}' >> $JOB
+
+echo '' >> $JOB
+echo "python3 -u $SUMMARIZER \\
+--r1-annot $BARCODE_ANNOTATION \\
+--r1-attributes $VARIABLES \\
+--cell-barcodes r2 \\
+--only-summary \\
+--no-save-intermediate \\
+--min-umi-output $MIN_UMI_OUTPUT \\
+--expected-cell-number $EXPECTED_CELL_NUMBER \\
+--no-output-header \\
+--save-gene-expression \\
+$ADDITIONAL_ARGS \\" >> $JOB
+echo '--sample-name $SAMPLE_NAME \
 ${SAMPLE_DIR}/${SAMPLE_NAME}.*.STAR.Aligned.out.bam.featureCounts.bam \
-${SAMPLE_DIR}/${SAMPLE_NAME}" >> $JOB
-echo "" >> $JOB
-echo "date" >> $JOB
-echo "" >> $JOB
+${SAMPLE_DIR}/${SAMPLE_NAME}' >> $JOB
+echo '' >> $JOB
 
-sbatch -J $JOB_NAME \
--o $LOG --time $TIME \
--c $CPUS --mem $MEM -p $QUEUE \
-$JOB
-
-
-JOB_NAME=scifi_pipeline.${SAMPLE_NAME}.summarize-exon
-SAMPLE_DIR=${ROOT_OUTPUT_DIR}/${SAMPLE_NAME}
-JOB=${SAMPLE_DIR}/${JOB_NAME}.sh
-LOG=${SAMPLE_DIR}/${JOB_NAME}.log
-
-echo '#!/bin/env bash' > $JOB
-echo "date" >> $JOB
-echo "" >> $JOB
-echo "python3 -u $SUMMARIZER \
---sample-name $SAMPLE_NAME \
---r1-annot $BARCODE_ANNOTATION \
---r1-attributes $VARIABLES \
---cell-barcodes r2 \
---only-summary \
---no-save-intermediate \
---min-umi-output 20 \
---no-output-header \
---save-gene-expression \
-$ADDITIONAL_ARGS \
+echo 'date' >> $JOB
+echo '' >> $JOB
+echo "python3 -u $SUMMARIZER \\
+--r1-annot $BARCODE_ANNOTATION \\
+--r1-attributes $VARIABLES \\
+--cell-barcodes r2 \\
+--only-summary \\
+--no-save-intermediate \\
+--min-umi-output $MIN_UMI_OUTPUT \\
+--expected-cell-number $EXPECTED_CELL_NUMBER \\
+--no-output-header \\
+--save-gene-expression \\
+$ADDITIONAL_ARGS \\" >> $JOB
+echo '--sample-name $SAMPLE_NAME \
 ${SAMPLE_DIR}/${SAMPLE_NAME}.*.STAR.Aligned.out.exon.bam.featureCounts.bam \
-${SAMPLE_DIR}/${SAMPLE_NAME}.exon" >> $JOB
-echo "" >> $JOB
-echo "date" >> $JOB
-echo "" >> $JOB
+${SAMPLE_DIR}/${SAMPLE_NAME}.exon' >> $JOB
+echo '' >> $JOB
+echo 'date' >> $JOB
+echo '' >> $JOB
 
 sbatch -J $JOB_NAME \
 -o $LOG --time $TIME \
 -c $CPUS --mem $MEM -p $QUEUE \
+--array=$ARRAY -N 1 \
 $JOB
+
 done

@@ -86,7 +86,7 @@ cd $ROOT_OUTPUT_DIR
 LANES=`seq 1 $N_LANES`
 
 
-ARRAY_FILE=${ROOT_OUTPUT_DIR}/${RUN_NAME}.array_file.txt
+ARRAY_FILE=${ROOT_OUTPUT_DIR}/scifi_pipeline.${RUN_NAME}.map.array_file.txt
 
 # # unfortunatelly, even though STAR can output to stdout 
 # # and featureCounts read from stdin, one cannot pipe them as 
@@ -130,7 +130,7 @@ TOTAL=`tail -n +2 $BARCODE_ANNOTATION | wc -l`
 for i in `seq 0 $ARRAY_SIZE $((TOTAL - 1))`; do
 ARRAY="${i}-$((i + ARRAY_SIZE - 1))"
 
-JOB_NAME=scifi_pipeline.${RUN_NAME}.${ARRAY}.map
+JOB_NAME=scifi_pipeline.${RUN_NAME}.map.${ARRAY}
 JOB=${ROOT_OUTPUT_DIR}/${JOB_NAME}.sh
 LOG=${ROOT_OUTPUT_DIR}/${JOB_NAME}.%a.log
 
