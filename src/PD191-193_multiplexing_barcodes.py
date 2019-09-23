@@ -107,29 +107,29 @@ annot.set_index("sample_name").to_csv(
 # Remove the multiplexing barcode from the name
 c = annot1.drop(["multiplexing_number", "multiplexing_barcode"], axis=1)
 c['sample_name'] = c['sample_name'].str.replace(r"_\d\d$", "")
-c = c.drop_duplicates().set_index("sample_name")[['384WP_well']]
-c.columns = ['plate_well']
+c = c.drop_duplicates().set_index("sample_name")[['combinatorial_barcode', '384WP_well']]
+c.columns = ['combinatorial_barcode', 'plate_well']
 c.to_csv(
     os.path.join("metadata", "sciRNA-seq.PD191_organoid_169M.oligos_2019-09-20.csv"))
 
 c = annot2.drop(["multiplexing_number", "multiplexing_barcode"], axis=1)
 c['sample_name'] = c['sample_name'].str.replace(r"_\d\d$", "")
-c = c.drop_duplicates().set_index("sample_name")[['384WP_well', 'Donor_ID']]
-c.columns = ['plate_well', 'donor_id']
+c = c.drop_duplicates().set_index("sample_name")[['combinatorial_barcode', '384WP_well', 'Donor_ID']]
+c.columns = ['combinatorial_barcode', 'plate_well', 'donor_id']
 c.to_csv(
     os.path.join("metadata", "sciRNA-seq.PD192_PBMCs_196M.oligos_2019-09-20.csv"))
 
-c = annot3.set_index('sample_name')[['384WP_well', 'Cell_line']]
-c.columns = ['plate_well', 'cell_line']
+c = annot3.set_index('sample_name')[['combinatorial_barcode', '384WP_well', 'Cell_line']]
+c.columns = ['combinatorial_barcode', 'plate_well', 'cell_line']
 c.to_csv(
     os.path.join("metadata", "sciRNA-seq.PD193_fivelines_383k.oligos_2019-09-20.csv"))
 
-c = annot4.set_index('sample_name')[['384WP_well']]
-c.columns = ['plate_well']
+c = annot4.set_index('sample_name')[['combinatorial_barcode', '384WP_well']]
+c.columns = ['combinatorial_barcode', 'plate_well']
 c.to_csv(
     os.path.join("metadata", "sciRNA-seq.PD193_humanmouse_765k.oligos_2019-09-20.csv"))
 
-c = annot5.set_index('sample_name')[['384WP_well']]
-c.columns = ['plate_well']
+c = annot5.set_index('sample_name')[['combinatorial_barcode', '384WP_well']]
+c.columns = ['combinatorial_barcode', 'plate_well']
 c.to_csv(
     os.path.join("metadata", "sciRNA-seq.PD193_humanmouse_153M.oligos_2019-09-20.csv"))
