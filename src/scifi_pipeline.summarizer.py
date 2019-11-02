@@ -1,25 +1,26 @@
 #!/usr/bin/env python
 
 import os
-import sys
-from argparse import ArgumentParser
-import time
 import pickle
+import sys
+import time
+
+from argparse import ArgumentParser
 from glob import glob
 
-import numpy as np
-import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
-import seaborn as sns
+import numpy as np
+import pandas as pd
 import scipy
+import seaborn as sns
 
 
 def parse_args():
     parser = ArgumentParser()
     parser.add_argument(
         dest="input_files", nargs="+",
-        help="Input BAM files to summarize. " +
+        help="Input BAM files to summarize. "
              "Can be several files or a regex that evaluates to several files.")
     parser.add_argument(
         dest="output_prefix",
@@ -49,7 +50,7 @@ def parse_args():
     parser.add_argument(
         "--barcode-orientation", dest="barcode_orientation", choices=choices, default=choices[0],
         help="Which orientation the r2 barcodes should be read as."
-             f"One of '{', '.join(choices)}'."
+             f" Defaults to '{choices[0]}'."
     )
     default = ["read", "r2", "umi", "gene", "pos"]
     parser.add_argument(
@@ -84,6 +85,18 @@ def parse_args():
         "--save-gene-expression", dest="save_gene_expression", action="store_true",
         help="Whether to create a gene expression matrix."
     )
+    parser.add_argument(
+        "--correct-r1-barcodes", dest="correct_r1_barcodes", action="store_true",
+        help="Whether set all r1 barcodes to the respective sequence from annotation."
+    )
+    parser.add_argument(
+        "--correct-r2-barcodes", dest="correct_r2_barcodes", action="store_true",
+        help="Whether to use a mapping of existing barcodes to correct r2 barcodes."
+    )
+    parser.add_argument(
+        "--correct-r2-barcode-file", dest="correct_r2_barcode_file",
+        help="File containing mapping between existing barcodes and correct barcodes."
+    )
     args = parser.parse_args()
 
     # # Example run:
@@ -110,6 +123,21 @@ def parse_args():
     #     "--no-output-header",
     #     "/scratch/lab_bock/shared/projects/sci-rna/data/PD190_humanmouse/PD190_humanmouse_*/*.STAR.Aligned.out.bam.featureCounts.bam",
     #     "/scratch/lab_bock/shared/projects/sci-rna/data/PD190_humanmouse/PD190_humanmouse"])
+
+    # args = parser.parse_args([
+    #     "--r1-annot", "/home/arendeiro/sci-rna/metadata/sciRNA-seq.PD193_fivelines_383k.oligos_2019-09-20.csv",
+    #     "--r1-attributes", "plate_well,cell_line",
+    #     "--cell-barcodes", "r2",
+    #     "--only-summary",
+    #     "--no-save-intermediate",
+    #     "--min-umi-output", "3",
+    #     "--expected-cell-number", "250326",
+    #     "--no-output-header",
+    #     "--save-gene-expression",
+    #     "--correct-r1-barcodes",
+    #     "--sample-name", "PD193_fivelines_383k_JurkatCas9TCRlib_A01",
+    #     "/home/arendeiro/sci-rna/data/PD193_fivelines_383k/PD193_fivelines_383k_JurkatCas9TCRlib_A01/PD193_fivelines_383k_JurkatCas9TCRlib_A01.*.STAR.Aligned.out.bam.featureCounts.bam",
+    #     "/home/arendeiro/sci-rna/data/PD193_fivelines_383k/PD193_fivelines_383k_JurkatCas9TCRlib_A01/PD193_fivelines_383k_JurkatCas9TCRlib_A01"])
 
     if args.sample_name is None:
         args.sample_name = args.output_prefix
@@ -154,8 +182,30 @@ def main():
 
     # read text files
     df = parse_data(args.input_files, nrows=args.nrows)
-    print(f"# {time.asctime()} - Saving all reads to pickle.")
-    to_pickle(df, "df", array=False)
+    # print(f"# {time.asctime()} - Saving all reads to pickle.")
+    # to_pickle(df, "df", array=False)
+
+    # correct r1 barcodes
+    if args.correct_r1_barcodes:
+        print(f"# {time.asctime()} - Updating r1 barcodes to the sequence of the well.")
+        df['r1'] = attrs.name
+        # df['r1'] = df['r1'].value_counts().idxmax()
+
+    # correct r2 barcodes
+    args.output_suffix = ""
+    if args.correct_r2_barcodes:
+        print(f"# {time.asctime()} - Updating barcodes not matching reference with corrected ones.")
+        mapping = pd.read_csv(args.correct_r2_barcode_file, header=None, sep="\t")
+        mapping = mapping.set_index(0).squeeze().to_dict()
+
+        # Fill nulls with same key
+        # mapping = {k: v if not pd.isnull(v) else k for k, v in mapping.items()}
+        to_match = {k: k for k in df['r2']}
+
+        # update
+        to_match.update(mapping)
+        df['r2'].update(pd.Series(to_match))
+        args.output_suffix = "_corrected"
 
     nr = df.isnull().sum().sum()
     if nr > 0:
@@ -164,16 +214,27 @@ def main():
     if 'int' not in str(df.dtypes['pos']):
         df.loc[:, "pos"] = df.loc[:, "pos"].astype(int)
 
+    # Save bulk profile
+    print(f"# {time.asctime()} - Saving bulk expression profile.")
+    (
+        df['gene'].value_counts()
+        .sort_values(ascending=False)
+        .to_frame(name=args.sample_name)
+        .to_csv(
+            os.path.join(args.output_prefix + "bulk_expression_profile.csv")))
+
     # Gather metrics per cell
     r1_annotation = None
     if "r1" in args.cell_barcodes:
-        r1_annotation = annotation.set_index("")[args.r1_attributes]
+        r1_annotation = annotation.set_index("combinatorial_barcode")[args.r1_attributes]
         r1_annotation.index.name = "r1"
     metrics = gather_stats_per_cell(
         df,
         r1_annotation=r1_annotation,
         species_mixture=args.species_mixture,
-        save_intermediate=args.save_intermediate)
+        save_intermediate=args.save_intermediate,
+        suffix=args.output_suffix)
+
     if "r1" not in args.cell_barcodes:
         # Add required attributes
         metrics = metrics.assign(**dict(zip(attrs.index, attrs.values)))
@@ -187,7 +248,9 @@ def main():
     (
         metrics
         .query(f"umi > {args.min_umi_output}")
-        .to_csv(args.output_prefix + "metrics.csv.gz", float_format='%.3f', header=args.output_header))
+        .to_csv(
+            args.output_prefix + "metrics" + args.output_suffix + ".csv.gz",
+            float_format='%.3f', header=args.output_header))
 
     if "r1" in args.cell_barcodes:
         # # now the same only for exactly matching barcodes
@@ -197,7 +260,8 @@ def main():
             r2_whitelist=r2_barcodes[args.barcode_orientation],
             save_intermediate=args.save_intermediate,
             plot=not args.only_summary)
-        metrics_filtered = metrics_filtered.assign(sample_name=args.sample_name, donor_id=args.sample_name.split("_")[-2], well=args.sample_name.split("_")[-1])
+        metrics_filtered = metrics_filtered.assign(
+            **dict(zip(attrs.index, attrs.values)))
         metrics_filtered.loc[:, int_cols] = metrics_filtered.loc[:, int_cols].astype(int)
         if not args.output_header:
             print(f"# {time.asctime()} - Not outputing header in file, but header is the following:")
@@ -205,7 +269,9 @@ def main():
         (
             metrics_filtered
             .query(f"umi > {args.min_umi_output}")
-            .to_csv(args.output_prefix + "metrics_filtered.csv.gz", float_format='%.3f', header=args.output_header))
+            .to_csv(
+                args.output_prefix + "metrics" + args.output_suffix + "_filtered.csv.gz",
+                float_format='%.3f', header=args.output_header))
 
     if args.only_summary:
         return
@@ -258,12 +324,28 @@ def parse_data(files, nrows=1e10):
             if "Unassigned" in read.get_tag("XS"):
                 continue
 
+            gene = read.get_tag('XT', with_value_type=True)
+            if gene[1] == 'i':
+                try:
+                    gene = [
+                        x[1] for x in read.get_tags(with_value_type=True)
+                        if x[0] == 'XT'
+                        and x[2] == 'Z']
+                    # print(f"# {time.asctime()} - Found read with double XT tag"
+                    #       f" (gene assignemnt): {read.qname}. Fixed it.")
+                except IndexError:
+                    print(f"# {time.asctime()} - Found read with non character"
+                          f" gene assignemnt: {read.qname}. Skipping it.")
+                    continue
+
             piece = [
+                # save only the read position
                 read.qname.split("#")[0],
+                # ":".join(read.qname.split("#")[0].split(":")[1:]),
                 read.get_tag("BC")[0:13],
                 read.get_tag("r2"),
                 read.get_tag("RX"),
-                read.get_tag("XT"),
+                gene[0],
                 read.pos]
             pieces.append(piece)
         print(f"# {time.asctime()} - Done with file {file}. {i} lines.")
@@ -295,16 +377,16 @@ def gather_stats_per_cell(
     # TODO: add mapping rate per cell (needs additional file)
 
     # # duplication per cell
-    reads_per_umi = df.groupby(args.cell_barcodes + ["gene", "pos"], sort=False)[
-        "umi"
-    ].size()
+    reads_per_umi = (
+        df.groupby(
+            args.cell_barcodes + ["gene", "pos"], sort=False)
+        ["umi"].size())
     reads_per_umi = reads_per_umi.reset_index(level=["gene", "pos"], drop=True)
     if save_intermediate:
         to_pickle(reads_per_umi, "reads_per_umi" + suffix)
 
     unique = reads_per_umi == 1
-    unique_per_cell = unique.groupby(level=args.cell_barcodes).sum()
-    unique_per_cell.name = "unique_umis"
+    unique_per_cell = unique.groupby(level=args.cell_barcodes).sum().rename("unique_umis")
     if save_intermediate:
         to_pickle(unique_per_cell, "unique_per_cell" + suffix)
 
@@ -319,7 +401,11 @@ def gather_stats_per_cell(
             .reset_index(level='pos', drop=True).reset_index()
             # Add required attributes
             .assign(**dict(zip(attrs.index, attrs.values)))
-            .to_csv(args.output_prefix + "expression.csv.gz", index=False, header=args.output_header))
+            .to_csv(
+                args.output_prefix + "expression" + suffix + ".csv.gz",
+                index=False, header=args.output_header)
+        )
+
     if save_intermediate:
         to_pickle(umi_counts, "umi_counts" + suffix)
     umis_per_cell = umi_counts.groupby(args.cell_barcodes, sort=False).sum().sort_values()

@@ -87,6 +87,7 @@ LANES=`seq 1 $N_LANES`
 
 
 ARRAY_FILE=${ROOT_OUTPUT_DIR}/scifi_pipeline.${RUN_NAME}.map.array_file.txt
+rm -f $ARRAY_FILE
 
 # # unfortunatelly, even though STAR can output to stdout 
 # # and featureCounts read from stdin, one cannot pipe them as 
@@ -103,16 +104,18 @@ if [[ $string == *"gRNA"* ]]; then
     INPUT_BAM=${PREFIX}.trimmed.bam
 else
     BAMS=()
-    DIR=/scratch/users/dbarreca/private/custom_demux/scRNA/${FLOWCELL}
+    # DIR=/scratch/users/dbarreca/private/custom_demux/scRNA/${FLOWCELL}
     # DIR=/scratch/users/arendeiro/custom_demux/scRNA
     # DIR=/scratch/lab_bsf/samples/${FLOWCELL}
+    DIR=/scratch/lab_bock/shared/projects/sci-rna/data/external/${FLOWCELL}/
     if [[ $N_BARCODES -gt 1 ]]; then
         for LANE in ${LANES[@]}; do
             BAMS+=(`eval echo $DIR/${FLOWCELL}_${LANE}_samples/${FLOWCELL}_${LANE}#${SAMPLE_NAME}_{01..$N_BARCODES}.bam`)
         done
     else
         for LANE in ${LANES[@]}; do
-            BAMS+=(`echo $DIR/${FLOWCELL}_${LANE}_samples/${FLOWCELL}_${LANE}#${SAMPLE_NAME}.bam`)
+            # BAMS+=(`echo $DIR/${FLOWCELL}_${LANE}_samples/${FLOWCELL}_${LANE}#${SAMPLE_NAME}.bam`)
+            BAMS+=(`echo $DIR/${SAMPLE_NAME}.annotated.bam`)
         done
     fi
     LANE="ALL"

@@ -12,10 +12,6 @@ import seaborn as sns
 import numpy as np
 
 
-if os.path.exists("/home/arendeiro/sci-rna"):
-    sys.path.insert(0, "/home/arendeiro/sci-rna")
-
-
 from src.scifi_utils import (
     load_metrics,
     get_exact_matches,
@@ -46,40 +42,46 @@ def parse_args():
     parser.add_argument(
         "--plotting-attributes",
         dest="plotting_attributes",
-        help="Additional attributes to plot metrics grouped by. A comma-delimited list."
-        "Several can be given. Example: 'donor_id sex plate'.",
+        help="Additional attributes to plot metrics grouped by."
+        " A comma-delimited list."
+        " Several can be given. Example: 'donor_id,sex,plate'.",
     )
     parser.add_argument(
         "--plate-column",
         dest="plate_column",
         default="plate",
-        help="Name of column in input metric files containing r1 plate information. "
+        help="Name of column in input metric files"
+        "containing r1 plate information. "
         "Defaults to 'plate'.",
     )
     parser.add_argument(
         "--well-column",
         dest="well_column",
         default="plate_well",
-        help="Name of column in input metric files containing r1 well plate information. "
+        help="Name of column in input metric files"
+        "containing r1 well plate information. "
         "Defaults to 'plate_well'.",
     )
     parser.add_argument(
         "--droplet-column",
         dest="droplet_column",
         default="r2",
-        help="Name of column in input metric files containing r2 (droplet) information. "
+        help="Name of column in input metric files"
+        "containing r2 (droplet) information. "
         "Defaults to 'r2'.",
     )
     parser.add_argument(
         "--nrows",
         dest="nrows",
-        help="An optional number of rows of input to process. " "Useful for testing.",
+        help="An optional number of rows of input to process. "
+        "Useful for testing.",
     )
     parser.add_argument(
         "--species-mixture",
         dest="species_mixture",
         action="store_true",
-        help="Whether the experiment is a species mixture. " "Default is false.",
+        help="Whether the experiment is a species mixture. "
+        "Default is false.",
     )
     parser.add_argument(
         "--expected-cell-number",
@@ -94,6 +96,14 @@ def parse_args():
         action="store_true",
         help="Whether to save intermediate pickle files.",
     )
+    parser.add_argument(
+        "--only-matching-barcodes",
+        dest="only_matching_barcodes",
+        action="store_true",
+        help="Whether to use only barcodes matching the reference."
+        "Requires a valid value for the '--r2-barcodes' option."
+        "Default is false.",
+    )
     default = os.path.join("metadata", "737K-cratac-v1.reverse_complement.csv")
     parser.add_argument(
         "--r2-barcodes", dest="r2_barcodes", default=default,
@@ -101,7 +111,8 @@ def parse_args():
              f"Defaults to '{default}.")
     choices = ["original", "reverse_complement"]
     parser.add_argument(
-        "--barcode-orientation", dest="barcode_orientation", choices=choices, default=choices[0],
+        "--barcode-orientation", dest="barcode_orientation",
+        choices=choices, default=choices[0],
         help="Which orientation the r2 barcodes should be read as."
              f"One of '{', '.join(choices)}'."
     )
@@ -128,12 +139,23 @@ def main():
     global args
     args = set_args(parse_args())
 
-    # read text files
-    try:
-        r2_barcodes = pd.read_csv(args.r2_barcodes)
-    except (OSError, IOError, FileNotFoundError):
-        r2_barcodes = None
     metrics = load_metrics(args.metric_files, nrows=args.nrows)
+
+    # Filter r2 barcodes if required
+    if args.only_matching_barcodes:
+        # read text files
+        try:
+            r2_barcodes = pd.read_csv(args.r2_barcodes)
+        except (OSError, IOError, FileNotFoundError):
+            msg = (
+                "Option --only-matching-barcodes given but value of "
+                f"--r2-barcodes could not be read: '{args.r2_barcodes}'")
+            raise FileNotFoundError(msg)
+        metrics = get_exact_matches(
+            metrics,
+            barcodes=['r2'],
+            whitelists=[r2_barcodes[args.barcode_orientation]],
+            expected_cell_number=args.expected_cell_number)
 
     # # Plot
     # # # Loglog line plot of rank vs abundance
@@ -146,7 +168,10 @@ def main():
     t = int(args.expected_cell_number * 5)
     plot_efficiency(metrics, tail=t)
     plot_efficiency(metrics, tail=t, colour_by="unique_fraction")
-    plot_efficiency(metrics, keys=['unique_fraction'], log_scale=False, tail=t, suffix="reads_vs_unique")
+    plot_efficiency(
+        metrics,
+        keys=['unique_fraction'],
+        log_scale=False, tail=t, suffix="reads_vs_unique")
 
     if args.species_mixture:
         plot_species_mixing(metrics)
@@ -156,16 +181,27 @@ def main():
         well_metrics = gather_stats_per_well(metrics, seq_content=True)
         plot_well_stats(well_metrics, tail=None, suffix="")
 
-        cells_per_droplet = metrics.tail(args.expected_cell_number).groupby(args.droplet_column)[
-            args.well_column
-        ].nunique().sort_values()
+        cells_per_droplet = (
+            metrics
+            .tail(args.expected_cell_number)
+            .groupby(args.droplet_column)
+            [args.well_column].nunique()
+            .sort_values())
         cells_per_droplet.name = "cells_per_droplet"
         cells_per_droplet_stats(cells_per_droplet)
 
         # Yield as a function of number of cells per droplet
-        m = metrics.tail(args.expected_cell_number).set_index("r2").join(cells_per_droplet).query("cells_per_droplet < 25")
+        m = (
+            metrics.tail(args.expected_cell_number)
+            .set_index("r2")
+            .join(cells_per_droplet)
+            .query("cells_per_droplet < 25"))
 
-        attrs = [('read', True), ('umi', True), ('gene', True), ('unique_fraction', False)]
+        attrs = [
+            ('read', True),
+            ('umi', True),
+            ('gene', True),
+            ('unique_fraction', False)]
         fig, axis = plt.subplots(len(attrs), 1, figsize=(9, 3 * len(attrs)))
         for i, (attr, log) in enumerate(attrs):
             sns.violinplot(m['cells_per_droplet'], m[attr], ax=axis[i])
@@ -182,18 +218,6 @@ def main():
                  'human_norm': np.sum, 'total_norm': np.sum,
                  'sp_ratio': np.mean, 'sp_ratio_norm': np.mean})
             plot_species_mixing(r2_metrics, suffix="only_r2")
-
-    # Barcode inspection
-    if r2_barcodes is not None:
-        metrics_filtered = get_exact_matches(
-            metrics,
-            barcodes=['r2'],
-            whitelists=[r2_barcodes[args.barcode_orientation]],
-            expected_cell_number=args.expected_cell_number)
-
-        t = int(args.expected_cell_number * 5)
-        plot_efficiency(metrics_filtered, suffix="filtered.", tail=t)
-        plot_efficiency(metrics_filtered, suffix="filtered.", tail=t, colour_by="unique_fraction")
 
     # Write expression matrix in sparse format as H5AD
     if len(args.metric_files) == 1:

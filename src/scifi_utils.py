@@ -17,7 +17,8 @@ def set_args(new_args):
     return args
 
 
-def write_gene_expression_matrix(expr, output_file=None, file_format="h5ad"):
+def write_gene_expression_matrix(
+        expr, output_file=None, file_format="h5ad", annotation=None):
     from scipy.sparse import csr_matrix
     import anndata as an
 
@@ -29,18 +30,33 @@ def write_gene_expression_matrix(expr, output_file=None, file_format="h5ad"):
         print(f"# {time.asctime()} - Dropping {n} entries with null UMI values.")
         expr = expr.dropna(subset=['umi'])
 
-    print(f"# {time.asctime()} - Adding cell label.")
+    print(f"# {time.asctime()} - Categorizing cells and genes.")
     expr = expr.assign(cell=expr['plate_well'] + "-" + expr[args.droplet_column])
-    print(f"# {time.asctime()} - Factorizing cells and genes.")
-    cell, unique_cell = expr['cell'].factorize()
-    gene, unique_gene = expr['gene'].factorize()
+    expr['cell'] = (
+        expr['plate_well'] + "-" + expr[args.droplet_column]
+    ).astype('category')
+    expr['gene'] = expr['gene'].astype('category')
+
+    print(f"# {time.asctime()} - Creating sparse matrix.")
+    sparse_matrix = csr_matrix(
+        (
+            expr['umi'].values,
+            (expr['cell'].cat.codes, expr['gene'].cat.codes)),
+        shape=(
+            len(expr['cell'].cat.categories),
+            len(expr['gene'].cat.categories)),
+        dtype=np.int)
 
     print(f"# {time.asctime()} - Creating AnnData object.")
-    a = an.AnnData(
-        csr_matrix((expr['umi'], (cell, gene)), shape=(len(unique_cell), len(unique_gene))),
-        dtype=np.int)
-    a.obs.index = unique_cell
-    a.var.index = unique_gene
+    a = an.AnnData(X=sparse_matrix)
+    print(f"# {time.asctime()} - Annotating with cells and genes.")
+    a.obs.index = expr['cell'].cat.categories
+    a.var.index = expr['gene'].cat.categories
+    a.obs['plate_well'] = a.obs.index.str.slice(0, 3)
+    if annotation is not None:
+        print(f"# {time.asctime()} - Adding additional annotation.")
+        a.obs = a.obs.reset_index().set_index("plate_well").join(
+            annotation.set_index("plate_well")).set_index("index")
 
     print(f"# {time.asctime()} - Writing h5ad object to disk.")
     if output_file is None:
@@ -218,6 +234,13 @@ def plot_metrics_lineplot(metrics, keys=['read', 'umi', 'gene'], tail=None, suff
                 "rasterized": True, "label": group if group != "dummy" else None}
             axis[i, 0].plot(rank, d, **kwargs)
             axis[i, 1].plot(rank_norm, d_norm, **kwargs)
+
+            # add inflection point
+            inf = inflection_point(d)
+            s = f"{d.shape[0] - inf} cells;\nmin {metric}s: {d.iloc[inf]}"
+            axis[i, 0].scatter(rank.iloc[inf], d.iloc[inf], s=20, color="black")
+            axis[i, 0].axvline(rank.iloc[inf], linestyle="--", color="black")
+            axis[i, 0].text(rank.iloc[inf], d.iloc[inf], s=s)
         axis[i, 0].axvline(args.expected_cell_number, linestyle="--", color="grey")
         for l, ax in enumerate(axis[i, :]):
             ax.loglog()
@@ -799,3 +822,18 @@ def get_full_files(cell_barcodes=['r2'], doublet_threshold=0.85):
             sp_ratio=spc["human"] / spc['total'])
         .sort_values("total"))
     spc = spc.assign(doublet=(spc['ratio'] < doublet_threshold).astype(int).replace(0, -1))
+
+
+def inflection_point(curve):
+    """Return the index of the inflection point of a curve"""
+    from numpy.matlib import repmat
+
+    n_points = len(curve)
+    all_coord = np.vstack((range(n_points), curve)).T
+    line_vec = (all_coord[-1] - all_coord[0])
+    line_vec_norm = line_vec / np.sqrt(np.sum(line_vec ** 2))
+    vec_from_first = all_coord - all_coord[0]
+    scalar_product = np.sum(
+        vec_from_first * repmat(line_vec_norm, n_points, 1), axis=1)
+    vec_to_line = vec_from_first - np.outer(scalar_product, line_vec_norm)
+    return np.argmax(np.sqrt(np.sum(vec_to_line ** 2, axis=1)))
