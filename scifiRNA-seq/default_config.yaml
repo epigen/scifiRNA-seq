@@ -1,0 +1,39 @@
+
+star_exe:
+  "/home/arendeiro/workspace/STAR-2.7.0e/bin/Linux_x86_64_static/STAR"
+star_genome_dir:
+  "/home/arendeiro/resources/genomes/hg38/indexed_STAR-2.7.0e/"
+gtf_file:
+  "/home/arendeiro/resources/genomes/hg38/10X/refdata-cellranger-GRCh38-1.2.0/genes/genes.gtf"
+annotation:
+  "/scratch/lab_bock/shared/projects/sci-rna/metadata/sciRNA-seq.PD190_humanmouse.oligos_2019-09-05.csv"
+root_output_dir:
+  /scratch/lab_bock/shared/projects/sci-rna/data/$(RUN_NAME)
+expected_cell_number:
+  200000
+min_umi_output:
+  3
+variables:
+  - "plate_well"
+array_size:
+  24
+species_mixing:
+  1
+star_dir:
+  "/home/arendeiro/resources/genomes/hg38_mm10_transgenes_Tcrlibrary/indexed_STAR_2.7.0e/"
+gtf_file:
+  "/home/arendeiro/resources/genomes/hg38_mm10_transgenes_Tcrlibrary/Homo_sapiens-Mus_musculus.Ensembl92.dna.primary_assembly.Tcr_lambda_spiked.gtf"
+chunks:
+  1000
+chunk_batch_size:
+  25
+grna_pbs_sequence:
+  GTGGAAAGGACGAAACACCG
+
+
+resoures:
+  map:
+    cpus: 4
+    mem: 60000
+    queue: "shortq"
+    time: "08:00:00"
