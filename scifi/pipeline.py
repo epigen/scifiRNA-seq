@@ -6,7 +6,6 @@ The entry point to running the scifi_pipeline on several samples.
 """
 
 import os
-import sys
 from argparse import ArgumentParser
 
 import yaml
@@ -14,6 +13,7 @@ import pandas as pd
 
 from scifi.utils import ct
 from scifi.map import map_command
+from scifi.filter import filter_command
 
 
 def build_cli():
@@ -62,6 +62,7 @@ def build_cli():
         # # - ...: str, optional (additional attributes, should be listed in `variables` below)
         # - variables: str (which of the columns of `annotation` should be used to annotate round1 wells)
         # - species_mixing: bool (whether the experiment is a species mixing)
+        # - expected_cell_number: int (expected cell number)
         # - toggle: bool, optional (whether the sample should be run)
         # - pass_qc: bool, optional (whether the sample passed QC and should be run)
 
@@ -75,7 +76,11 @@ def build_cli():
     map_cmd.add_argument("--input-bam-glob", dest="input_bam_glob", help=_help)
 
     _help = "Whether to correct round2 barcodes."
-    filter_cmd.add_argument("--fix-barcodes", help=_help)
+    filter_cmd.add_argument("--correct-r2-barcodes", dest="correct_r2_barcodes", action="store_true", help=_help)
+    _help = "Whitelist of round2 barcodes."
+    filter_cmd.add_argument("--r2-barcodes-whitelist", dest="r2_barcodes_whitelist", help=_help)
+    _help = "Whether to overwrite exitsing files."
+    filter_cmd.add_argument("--overwrite", dest="overwrite", action="store_true", help=_help)
     return parser
 
 
@@ -110,7 +115,15 @@ def main(cli=None):
         if args.command in ["all", "tracks"]:
             tracks_command(args)
         if args.command in ["all", "filter"]:
-            filter_command(args)
+            filter_command(
+                args, config,
+                sample_name, sample_out_dir,
+                r1_annotation,
+                r1_annotation_file=sample['annotation'],
+                r1_attributes=sample['attributes'],
+                species_mixture=bool(sample['species_mixing']),
+                expected_cell_number=sample['expected_cell_number'],
+                correct_r2_barcodes=False, correct_r2_barcodes_file=None)
         if args.command in ["all", "join"]:
             join_command(args)
         if args.command in ["all", "report"]:
@@ -132,10 +145,3 @@ def get_config(args=None):
             c = yaml.safe_load(args.config)
             config.update(c)
     return config
-
-
-if __name__ == "__main__":
-    try:
-        sys.exit(main())
-    except KeyboardInterrupt:
-        sys.exit(1)

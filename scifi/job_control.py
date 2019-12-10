@@ -21,17 +21,6 @@ def slurm_echo_array_task_id():
     return 'echo SLURM_ARRAY_TASK_ID = $SLURM_ARRAY_TASK_ID\n'
 
 
-def slurm_get_array_params_from_array_list(array_file):
-    # Get respective line of input based on the $SLURM_ARRAY_TASK_ID var
-    txt = (
-        f"ARRAY_FILE={array_file}" + "\n"
-        "readarray -t ARR < $ARRAY_FILE" + "\n"
-        'IFS=" " read -r -a F <<< ${ARR[$SLURM_ARRAY_TASK_ID]}' + "\n"
-        "PREFIX=${F[0]}" + "\n"
-        "INPUT_BAM=${F[1]}" + "\n")
-    return txt
-
-
 def job_end():
     return '\n\ndate\n'
 

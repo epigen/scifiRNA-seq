@@ -37,3 +37,18 @@ resoures:
     mem: 60000
     queue: "shortq"
     time: "08:00:00"
+  filter:
+    cpus: 1
+    mem: 8000
+    queue: "shortq"
+    time: "01:00:00"
+  join:
+    cpus: 1
+    mem: 8000
+    queue: "shortq"
+    time: "01:00:00"
+  report:
+    cpus: 4
+    mem: 120000
+    queue: "longq"
+    time: "3-00:00:00"

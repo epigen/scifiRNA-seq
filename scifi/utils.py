@@ -17,7 +17,7 @@ import seaborn as sns
 import scipy
 
 
-def gt():
+def ct():
     return "# " + time.asctime() + " - "
 
 

@@ -10,9 +10,9 @@ import pandas as pd
 from glob import glob
 from textwrap import dedent
 
-from .job_control import (
+from scifi.job_control import (
     job_shebang, print_parameters_during_job,
-    slurm_echo_array_task_id, slurm_get_array_params_from_array_list,
+    slurm_echo_array_task_id,
     job_end, write_job_to_file, submit_job)
 
 
@@ -70,9 +70,7 @@ def map_command(args, sample_name, sample_out_dir, r1_annotation, config):
         array_file = os.path.join(
             args.root_output_dir, sample_name,
             f"scifi_pipeline.{sample_name}.map.array_file.txt")
-        with open(array_file, "w") as handle:
-            for out_prefix, bam_files in zip(prefixes, bam_files):
-                handle.writelines(" ".join(out_prefix, bam_files))
+        write_array_params(zip(prefixes, bam_files), array_file)
 
         # Now submit job array in chunks of size ``array.size``
         for i in range(0, args.array_size, len(bams)):
@@ -88,7 +86,7 @@ def map_command(args, sample_name, sample_out_dir, r1_annotation, config):
 
             cmd = job_shebang()
             cmd += slurm_echo_array_task_id()
-            cmd += slurm_get_array_params_from_array_list(array_file)
+            cmd += get_array_params_from_array_list(array_file)
             cmd += print_parameters_during_job(params)
             cmd += star_cmd(
                 prefix=None, input_bams=None,
@@ -104,6 +102,23 @@ def map_command(args, sample_name, sample_out_dir, r1_annotation, config):
             cmd += job_end()
             write_job_to_file(cmd, job)
             submit_job(job, params)
+
+
+def write_array_params(params, array_file):
+    with open(array_file, "w") as handle:
+        for param in params:
+            handle.writelines(" ".join(param))
+
+
+def get_array_params_from_array_list(array_file):
+    # Get respective line of input based on the $SLURM_ARRAY_TASK_ID var
+    txt = (
+        f"ARRAY_FILE={array_file}" + "\n"
+        "readarray -t ARR < $ARRAY_FILE" + "\n"
+        'IFS=" " read -r -a F <<< ${ARR[$SLURM_ARRAY_TASK_ID]}' + "\n"
+        "PREFIX=${F[0]}" + "\n"
+        "INPUT_BAM=${F[1]}" + "\n")
+    return txt
 
 
 def star_cmd(
