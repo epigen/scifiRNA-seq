@@ -38,10 +38,10 @@ def write_gene_expression_matrix(
 
     n = expr["umi"].isnull().sum()
     if n > 0:
-        print(gt() + "Dropping {n} entries with null UMI values.")
+        print(ct() + "Dropping {n} entries with null UMI values.")
         expr = expr.dropna(subset=["umi"])
 
-    print(gt() + "Categorizing cells and genes.")
+    print(ct() + "Categorizing cells and genes.")
     expr = expr.assign(
         cell=expr["plate_well"] + "-" + expr[args.droplet_column]
     )
@@ -50,7 +50,7 @@ def write_gene_expression_matrix(
     ).astype("category")
     expr["gene"] = expr["gene"].astype("category")
 
-    print(gt() + "Creating sparse matrix.")
+    print(ct() + "Creating sparse matrix.")
     sparse_matrix = csr_matrix(
         (expr["umi"].values, (expr["cell"].cat.codes, expr["gene"].cat.codes)),
         shape=(
@@ -60,14 +60,14 @@ def write_gene_expression_matrix(
         dtype=np.int,
     )
 
-    print(gt() + "Creating AnnData object.")
+    print(ct() + "Creating AnnData object.")
     a = an.AnnData(X=sparse_matrix)
-    print(gt() + "Annotating with cells and genes.")
+    print(ct() + "Annotating with cells and genes.")
     a.obs.index = expr["cell"].cat.categories
     a.var.index = expr["gene"].cat.categories
     a.obs["plate_well"] = a.obs.index.str.slice(0, 3)
     if annotation is not None:
-        print(gt() + "Adding additional annotation.")
+        print(ct() + "Adding additional annotation.")
         a.obs = (
             a.obs.reset_index()
             .set_index("plate_well")
@@ -75,7 +75,7 @@ def write_gene_expression_matrix(
             .set_index("index")
         )
 
-    print(gt() + "Writing h5ad object to disk.")
+    print(ct() + "Writing h5ad object to disk.")
     if output_file is None:
         output_file = args.output_prefix + file_format
     if file_format == "h5ad":
@@ -85,10 +85,10 @@ def write_gene_expression_matrix(
 
 
 def load_metrics(files, **kwargs):
-    print(gt() + "Reading files.")
+    print(ct() + "Reading files.")
     pieces = list()
     for file in files:
-        print(gt() + "Reading file {file}.")
+        print(ct() + "Reading file {file}.")
         d = pd.read_csv(
             file,
             error_bad_lines=False,
@@ -97,9 +97,9 @@ def load_metrics(files, **kwargs):
             **kwargs,
         )
         pieces.append(d)
-        print(gt() + "Done with file {file}. {d.shape[0]} lines.")
+        print(ct() + "Done with file {file}. {d.shape[0]} lines.")
 
-    print(gt() + "Concatenating parts.")
+    print(ct() + "Concatenating parts.")
     return pd.concat(pieces).sort_values("umi")
 
 
@@ -112,7 +112,7 @@ def gather_stats_per_cell_as_droplet(
     r1_annotation=None,
     suffix="_r2_only",
 ):
-    print(gt() + "Gathering metrics per cell.")
+    print(ct() + "Gathering metrics per cell.")
 
     # performance metrics
     # # UMI count per cell
@@ -128,7 +128,7 @@ def gather_stats_per_cell_as_droplet(
         to_pickle(umis_per_cell, "umis_per_cell" + suffix)
 
     # species mixing
-    print(gt() + "Gathering species-specific metrics per cell.")
+    print(ct() + "Gathering species-specific metrics per cell.")
     umi_counts2 = umi_counts.reset_index()
     umi_counts2 = umi_counts2.assign(
         species=(
@@ -156,7 +156,7 @@ def gather_stats_per_cell_as_droplet(
     if save_intermediate:
         to_pickle(spc, "spc" + suffix)
 
-    print(gt() + "Joining all metrics.")
+    print(ct() + "Joining all metrics.")
     # TODO: speed up by assigning to column using equallly sorted indexes
     metrics_r2 = umis_per_cell.to_frame().join(spc).sort_values("umi")
 
@@ -271,7 +271,7 @@ def plot_metrics_lineplot(
     def min_max(x):
         return (x - x.min()) / (x.max() - x.min())
 
-    print(gt() + "Plotting metrics per cell.")
+    print(ct() + "Plotting metrics per cell.")
     if tail:
         metrics = metrics.tail(tail)
     n = len(keys)
@@ -341,7 +341,7 @@ def plot_metrics_lineplot(
 def plot_metrics_distplot(
     metrics, keys=["read", "umi", "gene"], tail=None, suffix="", by_group=None
 ):
-    print(gt() + "Plotting metrics per cell.")
+    print(ct() + "Plotting metrics per cell.")
     if tail:
         metrics = metrics.tail(tail)
     n = len(keys)
@@ -398,7 +398,7 @@ def plot_efficiency(
     """
     `metrics` must contain a column "read".
     """
-    print(gt() + "Plotting efficiency metrics per cell.")
+    print(ct() + "Plotting efficiency metrics per cell.")
     if tail:
         metrics = metrics.tail(tail)
 
@@ -524,7 +524,7 @@ def plot_species_mixing(
     zoom_in_area=3000,
     axislims=10000,
 ):
-    print(gt() + "Plotting species mixtures.")
+    print(ct() + "Plotting species mixtures.")
     if tail is None:
         tail = 2 * args.expected_cell_number
     if tail is not False:
@@ -594,7 +594,7 @@ def plot_species_mixing(
 
 
 def gather_stats_per_well(metrics, seq_content=False, save_intermediate=True):
-    print(gt() + "Gathering metrics per combinatorial indexing well.")
+    print(ct() + "Gathering metrics per combinatorial indexing well.")
     # # # see how many of the round1 barcodes (well) are captured
     umis_per_well = metrics.groupby(args.well_column)["umi"].sum().sort_values()
     umis_per_well.name = "umis"
@@ -639,7 +639,7 @@ def get_exact_matches(
     plot=True,
     suffix="",
 ):
-    print(gt() + "Filtering for exact barcode matches.")
+    print(ct() + "Filtering for exact barcode matches.")
 
     # Note to self, if metrics has r1_annotations, one could simply do isnull() to get barcodes matching r1
 
@@ -731,7 +731,7 @@ def get_exact_matches(
 def get_exact_matches_droplet(
     metrics, r2_whitelist, save_intermediate=True, plot=True, suffix="_r2_only"
 ):
-    print(gt() + "Filtering for exact barcode matches.")
+    print(ct() + "Filtering for exact barcode matches.")
 
     # Note to self, if metrics has r1_annotations, one could simply do isnull() to get barcodes matching r1
     r2_match = metrics.index.get_level_values("r2").isin(r2_whitelist)
@@ -801,7 +801,7 @@ def get_stats_per_droplet(
 def plot_well_stats(
     well_metrics, keys=["droplets", "umis"], tail=None, suffix=""
 ):
-    print(gt() + "Plotting metrics per combinatorial indexing well.")
+    print(ct() + "Plotting metrics per combinatorial indexing well.")
     if tail is not None:
         well_metrics = well_metrics.tail(tail)
 
@@ -855,7 +855,7 @@ def plot_barcode_match_fraction(matches, suffix=""):
     """
     Matches should be a dict with values as boolean vectors
     """
-    print(gt() + "Plotting fraction of correct barcodes.")
+    print(ct() + "Plotting fraction of correct barcodes.")
 
     d = pd.DataFrame(
         [
@@ -891,7 +891,7 @@ def plot_barcode_match_fraction(matches, suffix=""):
 
 
 def plot_umi_match_fraction(umi, matches, suffix=""):
-    print(gt() + "Plotting fraction of correct barcodes.")
+    print(ct() + "Plotting fraction of correct barcodes.")
 
     d = pd.DataFrame(
         [
@@ -955,7 +955,7 @@ def sequence_content_analysis(metrics, whitelist, barcode="r1", head=5000000):
 
 
 def to_pickle(obj, name, array=True, only_array=False):
-    print(gt() + "Saving {name} to pickle.")
+    print(ct() + "Saving {name} to pickle.")
     if array:
         pickle.dump(
             obj.values,
@@ -970,7 +970,7 @@ def to_pickle(obj, name, array=True, only_array=False):
 
 
 def from_pickle(key, array=False):
-    print(gt() + "Loading {key} from pickle.")
+    print(ct() + "Loading {key} from pickle.")
     if array:
         return pickle.load(
             open(args.output_prefix + f"{key}.values.pickle", "rb")

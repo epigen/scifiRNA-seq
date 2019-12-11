@@ -14,12 +14,13 @@ import pandas as pd
 from scifi.utils import ct
 from scifi.map import map_command
 from scifi.filter import filter_command
+from scifi.join import join_command
 
 
 def build_cli():
     parser = ArgumentParser()
 
-    sp = parser.add_subparsers(dest="command")
+    sp = parser.add_subparsers(dest="command", required=True)
     all_cmd = sp.add_parser("all")
     map_cmd = sp.add_parser("map")
     filter_cmd = sp.add_parser("tracks")
@@ -32,25 +33,38 @@ def build_cli():
             _help = "Whether to use job arrays (only supported for SLURM)."
             cmd.add_argument("--arrayed", help=_help, action="store_true")
             _help = "Size of job arrays."
-            cmd.add_argument("--array-size", dest="array_size", help=_help, type=int)
+            cmd.add_argument(
+                "--array-size", dest="array_size", help=_help, type=int
+            )
         _help = "Whether to not submit any jobs."
         cmd.add_argument("-d", "--dry-run", action="store_true", help=_help)
         _help = "Whether to only run samples marked with '1' in toggle column."
         cmd.add_argument("-t", "--toggle", action="store_true", help=_help)
         _help = "Samples to subset. Comma delimited."
-        cmd.add_argument("-s", "--sample-subset", help=_help, default="")
+        cmd.add_argument(
+            "-s",
+            "--sample-subset",
+            dest="sample_subset",
+            help=_help,
+            default="",
+        )
         _help = "Samples to subset. Comma delimited."
         cmd.add_argument(
-            "-c", "--config-file", dest="config_file", help=_help, default="")
+            "-c", "--config-file", dest="config_file", help=_help, default=""
+        )
         _help = (
             "Directory to output files. By default it will be 'pipeline_output'"
-            " in current directory")
-        cmd.add_argument("-o", "--output-dir", dest="root_output_dir", help=_help)
+            " in current directory"
+        )
+        cmd.add_argument(
+            "-o", "--output-dir", dest="root_output_dir", help=_help
+        )
         _help = (
             "YAML configuration file."
             " If not provided will use the one distributed"
             " with the package, or one in a file in"
-            " ~/.scifiRNA-seq.config.yaml")
+            " ~/.scifiRNA-seq.config.yaml"
+        )
         cmd.add_argument(dest="sample_annotation", help=_help)
         # Requirements for a sample (rows of `sample_annotation`):
         # - sample_name: str (a name for a sample)
@@ -72,22 +86,34 @@ def build_cli():
         " with values from "
         " the sample metadata (e.g. {sample_name}) or round1 metadata"
         " (e.g. {plate_well})."
-        " Example: /scratch/lab/sequences/{flowcell}/{flowcell}#*_{sample_name}.bam")
+        " Example: /lab/seq/{flowcell}/{flowcell}#*_{sample_name}.bam"
+    )
     map_cmd.add_argument("--input-bam-glob", dest="input_bam_glob", help=_help)
 
     _help = "Whether to correct round2 barcodes."
-    filter_cmd.add_argument("--correct-r2-barcodes", dest="correct_r2_barcodes", action="store_true", help=_help)
+    filter_cmd.add_argument(
+        "--correct-r2-barcodes",
+        dest="correct_r2_barcodes",
+        action="store_true",
+        help=_help,
+    )
     _help = "Whitelist of round2 barcodes."
-    filter_cmd.add_argument("--r2-barcodes-whitelist", dest="r2_barcodes_whitelist", help=_help)
+    filter_cmd.add_argument(
+        "--r2-barcodes-whitelist", dest="r2_barcodes_whitelist", help=_help
+    )
     _help = "Whether to overwrite exitsing files."
-    filter_cmd.add_argument("--overwrite", dest="overwrite", action="store_true", help=_help)
+    filter_cmd.add_argument(
+        "--overwrite", dest="overwrite", action="store_true", help=_help
+    )
     return parser
 
 
 def main(cli=None):
     print(ct() + "scifi-RNA-seq pipeline")
     args = build_cli().parse_args(cli)
-    args.samples = args.samples.split(",") if args.samples != "" else []
+    args.sample_subset = (
+        args.sample_subset.split(",") if args.sample_subset != "" else []
+    )
     print(args)
 
     config = get_config(args.config)
@@ -97,35 +123,52 @@ def main(cli=None):
 
     if args.toggle and "toggle" in df.columns:
         df = df.query("toggle == 1")
-    if args.samples:
-        df = df.loc[df['sample_name'].isin(args.samples), :]
+    if args.sample_subset:
+        df = df.loc[df["sample_name"].isin(args.sample_subset), :]
 
-    s = '\n\t - ' + '\n\t - '.join(df['sample_name'])
+    s = "\n\t - " + "\n\t - ".join(df["sample_name"])
     print(ct() + f"Samples to submit:{s}")
 
     for i, sample in df.iterrows():
         print(ct() + f"Doing sample {sample['sample_name']}")
 
-        sample_name = sample['sample_name']
-        r1_annotation = pd.read_csv(sample['annotation']).set_index("sample_name")
+        sample_name = sample["sample_name"]
+        r1_annotation_file = sample["annotation"]
+        r1_annotation = pd.read_csv(r1_annotation_file).set_index(
+            "sample_name"
+        )
         sample_out_dir = os.path.join(args.root_output_dir, sample_name)
+        sample_attributes = sample["attributes"].split(",")
+        species_mixing = bool(sample["species_mixing"])
+        expected_cell_number = int(sample["expected_cell_number"])
 
         if args.command in ["all", "map"]:
-            map_command(args, sample_name, sample_out_dir, r1_annotation, config)
+            map_command(
+                args, sample_name, sample_out_dir, r1_annotation, config
+            )
         if args.command in ["all", "tracks"]:
             tracks_command(args)
         if args.command in ["all", "filter"]:
             filter_command(
-                args, config,
-                sample_name, sample_out_dir,
+                args,
+                config,
+                sample_name,
+                sample_out_dir,
                 r1_annotation,
-                r1_annotation_file=sample['annotation'],
-                r1_attributes=sample['attributes'],
-                species_mixture=bool(sample['species_mixing']),
-                expected_cell_number=sample['expected_cell_number'],
-                correct_r2_barcodes=False, correct_r2_barcodes_file=None)
+                r1_annotation_file=r1_annotation_file,
+                r1_attributes=sample_attributes,
+                species_mixture=species_mixing,
+                expected_cell_number=expected_cell_number,
+                correct_r2_barcodes=False,
+                correct_r2_barcodes_file=None,
+            )
         if args.command in ["all", "join"]:
-            join_command(args)
+            join_command(
+                sample_name,
+                sample_out_dir,
+                r1_attributes=sample_attributes,
+                species_mixture=species_mixing,
+                correct_r2_barcodes=False)
         if args.command in ["all", "report"]:
             report_command(args)
 

@@ -46,9 +46,9 @@ resoures:
     cpus: 1
     mem: 8000
     queue: "shortq"
-    time: "01:00:00"
+    time: "00:30:00"
   report:
     cpus: 4
-    mem: 120000
+    mem: 80000
     queue: "longq"
     time: "3-00:00:00"

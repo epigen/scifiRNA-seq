@@ -17,7 +17,7 @@ from .job_control import (
 def filter_command(
         args, config,
         sample_name, sample_out_dir,
-        r1_annotation, r1_annotation_file, r1_attributes,
+        r1_annotation, r1_annotation_file, r1_attributes: list,
         species_mixture=False, expected_cell_number=200000,
         correct_r2_barcodes=False, correct_r2_barcodes_file=None):
     filter_params = dict(
@@ -143,7 +143,8 @@ def get_array_params_from_array_list(array_file):
 
 
 def filter_cmd(
-        r1_annotation, r1_attributes,
+        r1_annotation,
+        r1_attributes: list,
         prefix=None, sample_name=None,
         exon=False,
         min_umis=3, expected_cell_number=200000,
@@ -168,7 +169,7 @@ def filter_cmd(
     txt = f"""
     {sys.executable} -u -m scifi.scripts.summarizer \\
     --r1-annot {r1_annotation} \\
-    --r1-attributes {r1_attributes} \\
+    --r1-attributes {",".join(r1_attributes)} \\
     --cell-barcodes {cell_barcodes} \\
     --only-summary \\
     --no-save-intermediate \\
