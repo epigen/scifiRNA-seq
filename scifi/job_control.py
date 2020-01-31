@@ -14,7 +14,7 @@ def job_shebang():
 
 
 def print_parameters_during_job(job_params):
-    return "\n".join([f"#{k} = {v}" for k, v in job_params.items()]) + "\n"
+    return "\n" + "\n".join([f"# {k} = {v}" for k, v in job_params.items()]) + "\n\n"
 
 
 def slurm_echo_array_task_id():
@@ -22,7 +22,7 @@ def slurm_echo_array_task_id():
 
 
 def job_end():
-    return '\n\ndate\n'
+    return '\n\ndate\n\n'
 
 
 def write_job_to_file(job, job_file):
@@ -35,9 +35,9 @@ def submit_job(job_file, params, array=None, cmd="sbatch"):
         array = f"--array={array} -N 1\\\n"
     params.update({"job_file": job_file, "cmd": cmd})
     cmd = """{cmd} -J {job_name} \\
-    -o {log} --time {time} \\
+    -o {log_file} --time {time} \\
     -c {cpus} --mem {mem} -p {queue} \\
-    {array} {job_file}""".format(params)
+    {array}{job_file}""".format(array="" if array is not None else "", **params)
 
     subprocess.Popen(cmd.split(" "))
 

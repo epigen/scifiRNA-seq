@@ -44,7 +44,7 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "scifi = scifi.pipeline:main"]
+            "scifi = scifi:pipeline.main"]
     },
     description="A processing pipeline for scifiRNA-seq data.",
     long_description=long_description,
@@ -74,10 +74,6 @@ setup(
         # "testing": requirements_test,
         # "docs": requirements_docs
     },
-    package_data={"scifi": ["*.yaml"]},
-    data_files=[
-        "requirements.txt",
-        # "requirements/requirements.test.txt",
-    ],
+    package_data={"scifi": ["config/default.yaml", "requirements.txt"]},
     **extra
 )

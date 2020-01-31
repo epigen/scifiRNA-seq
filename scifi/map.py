@@ -10,6 +10,7 @@ import pandas as pd
 from glob import glob
 from textwrap import dedent
 
+from scifi import _LOGGER
 from scifi.job_control import (
     job_shebang, print_parameters_during_job,
     slurm_echo_array_task_id,
@@ -17,6 +18,7 @@ from scifi.job_control import (
 
 
 def map_command(args, sample_name, sample_out_dir, r1_annotation, config):
+    _LOGGER.debug(f"Running map command for sample '{sample_name}'")
     map_params = dict(
         cpus=4,
         mem=60000,
@@ -25,19 +27,31 @@ def map_command(args, sample_name, sample_out_dir, r1_annotation, config):
 
     prefixes = list()
     bams = list()
+    _LOGGER.debug("Getting input BAM files for each r1 barcode.")
+    attrs = pd.Series(args.input_bam_glob).str.extractall("{(.*?)}").squeeze()
+    attrs = set([attrs] if isinstance(attrs, str) else attrs)
+    _LOGGER.debug(f"Attributes to use in input BAM files glob: '{attrs}'")
     for r1_name, r1 in r1_annotation.iterrows():
+        _LOGGER.debug(f"Getting input BAM files for '{r1_name}'")
         r1['sample_name'] = r1.name
         out_dir = os.path.join(args.root_output_dir, sample_name, r1_name)
         out_prefix = os.path.join(out_dir, r1_name) + ".ALL"
+        _LOGGER.debug(f"Prefix for sample '{r1_name}': '{out_prefix}'")
 
         # get input BAM files
-        attrs = set(
-            pd.Series(args.input_bam_glob).str.extractall("{(.*?)}").squeeze())
         to_fmt = {attr: r1[attr] for attr in attrs}
+        _LOGGER.debug(f"Formatting variables for sample '{r1_name}': '{to_fmt}'")
         bam_file_glob = args.input_bam_glob.format(**to_fmt)
+        _LOGGER.debug(f"Glob for BAM files for sample '{r1_name}': '{bam_file_glob}'")
         bam_files = ",".join(glob(bam_file_glob))
+        _LOGGER.debug(f"BAM files of sample '{r1_name}': '{bam_files}'")
         prefixes.append(out_prefix)
         bams.append(bam_files)
+
+    if (not prefixes) or (not bam_files):
+        _LOGGER.debug("Either 'prefixes' or 'bam_files' is an empty list.")
+        _LOGGER.error("Nothing to process! Likely no BAM files were found!")
+        return 1
 
     if not args.arrayed:
         for out_prefix, bam_files in zip(prefixes, bam_files):

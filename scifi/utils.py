@@ -955,7 +955,7 @@ def sequence_content_analysis(metrics, whitelist, barcode="r1", head=5000000):
 
 
 def to_pickle(obj, name, array=True, only_array=False):
-    print(ct() + "Saving {name} to pickle.")
+    print(ct() + f"Saving {name} to pickle.")
     if array:
         pickle.dump(
             obj.values,
@@ -970,7 +970,7 @@ def to_pickle(obj, name, array=True, only_array=False):
 
 
 def from_pickle(key, array=False):
-    print(ct() + "Loading {key} from pickle.")
+    print(ct() + f"Loading {key} from pickle.")
     if array:
         return pickle.load(
             open(args.output_prefix + f"{key}.values.pickle", "rb")

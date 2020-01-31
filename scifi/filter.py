@@ -8,7 +8,8 @@ The main command and supporting functions for the filter step of scifi pipeline
 import os
 import sys
 
-from .job_control import (
+from scifi import _LOGGER
+from scifi.job_control import (
     job_shebang, print_parameters_during_job,
     slurm_echo_array_task_id,
     job_end, write_job_to_file, submit_job)
@@ -19,7 +20,8 @@ def filter_command(
         sample_name, sample_out_dir,
         r1_annotation, r1_annotation_file, r1_attributes: list,
         species_mixture=False, expected_cell_number=200000,
-        correct_r2_barcodes=False, correct_r2_barcodes_file=None):
+        correct_r2_barcodes=False, correct_r2_barcodes_file=None, dry_run=False):
+    _LOGGER.debug(f"Running filter command for sample '{sample_name}'")
     filter_params = dict(
         cpus=1,
         mem=8000,
@@ -35,40 +37,48 @@ def filter_command(
         out_dir = os.path.join(args.root_output_dir, sample_name, r1_name)
         out_prefix = os.path.join(out_dir, r1_name) + ".ALL"
         output_suffix = "metrics" if not args.correct_r2_barcodes else "metrics_corrected"
+        out_file = f"{out_prefix}.{output_suffix}.csv.gz"
+        _LOGGER.debug(f"Sample '{r1_name}': '{out_prefix}\n{out_file}'")
 
-        if os.path.exists(f"{out_prefix}.{output_suffix}.csv.gz") and not args.overwrite:
+        if os.path.exists(out_file) and not args.overwrite:
             continue
         r1_names.append(r1_name)
         r1_dirs.append(out_dir)
+
+    if (not r1_names) or (not r1_dirs):
+        _LOGGER.debug("Either 'r1_names' or 'r1_dirs' is an empty list.")
+        _LOGGER.error("Nothing to process! Output files already found and 'overwrite' option is off!")
+        return 1
 
     if not args.arrayed:
         for r1_name, sample_dir in zip(r1_names, r1_dirs):
             job_name = f"scifi_pipeline.{sample_name}.filter.{r1_name}"
             job = os.path.join(sample_out_dir, job_name + ".sh")
             log = os.path.join(sample_out_dir, job_name + ".log")
-            out_prefix = os.path.join(r1_dirs, r1_name) + ".ALL"
+            out_prefix = os.path.join(sample_dir, r1_name) + ".ALL"
             params = dict(
                 filter_params,
+                job_name=job_name,
                 job_file=job,
                 log_file=log)
 
             cmd = job_shebang()
             cmd += print_parameters_during_job(params)
             cmd += filter_cmd(
-                r1_annotation, r1_attributes,
+                r1_annotation_file, r1_attributes,
                 prefix=out_prefix, sample_name=r1_name,
                 exon=False,
-                min_umis=config.min_umi_output,
+                min_umis=config['min_umi_output'],
                 expected_cell_number=expected_cell_number,
                 cell_barcodes="r2", species_mixture=species_mixture,
                 correct_r2_barcodes=correct_r2_barcodes,
                 correct_r2_barcodes_file=correct_r2_barcodes_file,
                 overwrite=args.overwrite)
             cmd += filter_cmd(
-                r1_annotation, r1_attributes,
+                r1_annotation_file, r1_attributes,
                 prefix=out_prefix, sample_name=r1_name,
                 exon=True,
-                min_umis=config.min_umi_output,
+                min_umis=config['min_umi_output'],
                 expected_cell_number=expected_cell_number,
                 cell_barcodes="r2", species_mixture=species_mixture,
                 correct_r2_barcodes=correct_r2_barcodes,
@@ -76,7 +86,8 @@ def filter_command(
                 overwrite=args.overwrite)
             cmd += job_end()
             write_job_to_file(cmd, job)
-            submit_job(job, params)
+            if not dry_run:
+                submit_job(job, params)
     else:
         # Write prefix and BAM files to array file
         array_file = os.path.join(
@@ -92,6 +103,7 @@ def filter_command(
             log = os.path.join(sample_out_dir, job_name + ".%a.log")
             params = dict(
                 filter_params,
+                job_name=job_name,
                 job_file=job,
                 log_file=log,
                 array=array)
@@ -101,20 +113,20 @@ def filter_command(
             cmd += get_array_params_from_array_list(array_file)
             cmd += print_parameters_during_job(params)
             cmd += filter_cmd(
-                r1_annotation, r1_attributes,
+                r1_annotation_file, r1_attributes,
                 prefix=None, sample_name=None,
                 exon=False,
-                min_umis=config.min_umi_output,
+                min_umis=config['min_umi_output'],
                 expected_cell_number=expected_cell_number,
                 cell_barcodes="r2", species_mixture=species_mixture,
                 correct_r2_barcodes=correct_r2_barcodes,
                 correct_r2_barcodes_file=correct_r2_barcodes_file,
                 overwrite=args.overwrite)
             cmd += filter_cmd(
-                r1_annotation, r1_attributes,
+                r1_annotation_file, r1_attributes,
                 prefix=None, sample_name=None,
                 exon=True,
-                min_umis=config.min_umi_output,
+                min_umis=config['min_umi_output'],
                 expected_cell_number=expected_cell_number,
                 cell_barcodes="r2", species_mixture=species_mixture,
                 correct_r2_barcodes=correct_r2_barcodes,
@@ -122,7 +134,8 @@ def filter_command(
                 overwrite=args.overwrite)
             cmd += job_end()
             write_job_to_file(cmd, job)
-            submit_job(job, params)
+            if not dry_run:
+                submit_job(job, params)
 
 
 def write_array_params(params, array_file):
@@ -166,8 +179,7 @@ def filter_cmd(
         sample_name = "${SAMPLE_NAME}"
     if exon:
         exon = ".exon"
-    txt = f"""
-    {sys.executable} -u -m scifi.scripts.summarizer \\
+    txt = f"""{sys.executable} -u -m scifi.scripts.summarizer \\
     --r1-annot {r1_annotation} \\
     --r1-attributes {",".join(r1_attributes)} \\
     --cell-barcodes {cell_barcodes} \\
@@ -178,7 +190,7 @@ def filter_cmd(
     --no-output-header \\
     --save-gene-expression \\
     --correct-r1-barcodes \\
-    {additional_args}--sample-name {sample_name} \
-    {prefix}.*.STAR.Aligned.out{exon}.bam.featureCounts.bam \
+    {additional_args}--sample-name {sample_name} \\
+    {prefix}.*.STAR.Aligned.out{exon}.bam.featureCounts.bam \\
     {prefix}{exon}"""
     return txt + "\n"

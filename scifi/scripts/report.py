@@ -12,7 +12,7 @@ import seaborn as sns
 import numpy as np
 
 
-from src.scifi_utils import (
+from scifi.utils import (
     load_metrics,
     get_exact_matches,
     plot_efficiency,
