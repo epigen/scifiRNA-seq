@@ -7,7 +7,9 @@ The main command and supporting functions for the filter step of scifi pipeline
 
 import os
 import sys
+import argparse
 
+import pandas as pd
 from scifi import _LOGGER
 from scifi.job_control import (
     job_shebang, print_parameters_during_job,
@@ -16,11 +18,13 @@ from scifi.job_control import (
 
 
 def filter_command(
-        args, config,
-        sample_name, sample_out_dir,
-        r1_annotation, r1_annotation_file, r1_attributes: list,
-        species_mixture=False, expected_cell_number=200000,
-        correct_r2_barcodes=False, correct_r2_barcodes_file=None, dry_run=False):
+        args: argparse.Namespace, config: dict,
+        sample_name: str, sample_out_dir: str,
+        r1_annotation: pd.DataFrame, r1_annotation_file: str,
+        r1_attributes: list,
+        species_mixture: bool = False, expected_cell_number: int = 200000,
+        correct_r2_barcodes: bool = False, correct_r2_barcodes_file: str = None,
+        dry_run: bool = False) -> int:
     _LOGGER.debug(f"Running filter command for sample '{sample_name}'")
     filter_params = dict(
         cpus=1,
@@ -136,6 +140,7 @@ def filter_command(
             write_job_to_file(cmd, job)
             if not dry_run:
                 submit_job(job, params)
+    return 0
 
 
 def write_array_params(params, array_file):

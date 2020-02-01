@@ -17,7 +17,7 @@ def join_command(
         sample_out_dir: str,
         r1_attributes: list,
         species_mixture: bool,
-        correct_r2_barcodes: bool):
+        correct_r2_barcodes: bool) -> int:
     join_params = dict(
         cpus=1,
         mem=8000,
@@ -35,24 +35,29 @@ def join_command(
     cmd = job_shebang()
     cmd += print_parameters_during_job(params)
     cmd += join_metrics(
+        sample_name=sample_name,
         directory=sample_out_dir,
         r1_attributes=r1_attributes, species_mixture=species_mixture,
         exon=False, correct_r2_barcodes=correct_r2_barcodes)
     cmd += join_metrics(
+        sample_name=sample_name,
         directory=sample_out_dir,
         r1_attributes=r1_attributes, species_mixture=species_mixture,
         exon=True, correct_r2_barcodes=correct_r2_barcodes)
     cmd += join_expression(
+        sample_name=sample_name,
         directory=sample_out_dir,
         r1_attributes=r1_attributes,
         exon=False, correct_r2_barcodes=correct_r2_barcodes)
     cmd += join_expression(
+        sample_name=sample_name,
         directory=sample_out_dir,
         r1_attributes=r1_attributes,
         exon=True, correct_r2_barcodes=correct_r2_barcodes)
     cmd += job_end()
     write_job_to_file(cmd, job)
     submit_job(job, params)
+    return 0
 
 
 def write_array_params(params, array_file):
@@ -83,11 +88,11 @@ def join_metrics(
     """
     prefix = os.path.join(directory, sample_name)
     filter_exon = "! -name '*exon*'" if not exon else ""
-    exon = ".exon" if exon else ""
+    exon_str = ".exon" if exon else ""
     suffix = "_corrected" if correct_r2_barcodes else ""
     brackets = "{}"
 
-    fields = "r2,read,unique_umi,umi,gene".split(",")
+    fields = "r2,read,unique_umi,umi,gene"
     if species_mixture:
         mix_fields = (
             "human,mouse,total,max,ratio,sp_ratio,doublet,unique_fraction,"
@@ -103,15 +108,15 @@ def join_metrics(
     else:
         mix_fields = ["unique_fraction"]
 
-    fields = ",".join(fields + mix_fields + r1_attributes)
+    fields = ",".join(fields.split(",") + mix_fields + r1_attributes)
 
     return f"""
-    find {directory}  -mindepth 2 -name '*{exon}.metrics{suffix}.csv.gz' {filter_exon} -exec cat {brackets} \\; > {prefix}{exon}.metrics{suffix}.csv.gz
-    echo '{fields}' > {sample_name}_header1{exon}
-    gzip {sample_name}_header1{exon}
-    cat {sample_name}_header1{exon}.gz {prefix}{exon}.metrics{suffix}.csv.gz > {sample_name}_tmp1{exon}
-    mv {sample_name}_tmp1{exon} {prefix}{exon}.metrics{suffix}.csv.gz
-    rm {sample_name}_header1{exon}.gz\n\n"""
+    find {directory}  -mindepth 2 -name '*{exon_str}.metrics{suffix}.csv.gz' {filter_exon} -exec cat {brackets} \\; > {prefix}{exon_str}.metrics{suffix}.csv.gz
+    echo '{fields}' > {sample_name}_header1{exon_str}
+    gzip {sample_name}_header1{exon_str}
+    cat {sample_name}_header1{exon_str}.gz {prefix}{exon_str}.metrics{suffix}.csv.gz > {sample_name}_tmp1{exon_str}
+    mv {sample_name}_tmp1{exon_str} {prefix}{exon_str}.metrics{suffix}.csv.gz
+    rm {sample_name}_header1{exon_str}.gz\n\n"""
 
 
 def join_expression(
@@ -124,16 +129,16 @@ def join_expression(
     """
     prefix = os.path.join(directory, sample_name)
     filter_exon = "! -name '*exon*'" if not exon else ""
-    exon = ".exon" if exon else ""
+    exon_str = ".exon" if exon else ""
     suffix = "_corrected" if correct_r2_barcodes else ""
     brackets = "{}"
 
     fields = "r2,gene,umi".split(",") + r1_attributes
 
     return f"""
-    find {directory}  -mindepth 2 -name '*{exon}.expression{suffix}.csv.gz' {filter_exon} -exec cat {brackets} \\; > {prefix}{exon}.expression{suffix}.csv.gz
-    echo '{fields}' > {sample_name}_header2{exon}
-    gzip {sample_name}_header2{exon}
-    cat {sample_name}_header2{exon}.gz {prefix}{exon}.expression{suffix}.csv.gz > {sample_name}_tmp2{exon}
-    mv {sample_name}_tmp2{exon} {prefix}{exon}.expression{suffix}.csv.gz
-    rm {sample_name}_header2{exon}.gz\n\n"""
+    find {directory}  -mindepth 2 -name '*{exon_str}.expression{suffix}.csv.gz' {filter_exon} -exec cat {brackets} \\; > {prefix}{exon_str}.expression{suffix}.csv.gz
+    echo '{fields}' > {sample_name}_header2{exon_str}
+    gzip {sample_name}_header2{exon_str}
+    cat {sample_name}_header2{exon_str}.gz {prefix}{exon_str}.expression{suffix}.csv.gz > {sample_name}_tmp2{exon_str}
+    mv {sample_name}_tmp2{exon_str} {prefix}{exon_str}.expression{suffix}.csv.gz
+    rm {sample_name}_header2{exon_str}.gz\n\n"""

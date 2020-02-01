@@ -6,11 +6,10 @@ The entry point to running the scifi_pipeline on several samples.
 """
 
 import os
-from argparse import ArgumentParser
+import argparse
 
 import pandas as pd
 
-from scifi.utils import ct
 from scifi.map import map_command
 from scifi.filter import filter_command
 from scifi.join import join_command
@@ -23,9 +22,9 @@ SAMPLE_ANNOTATION_COLUMNS = [
 ]
 
 
-def build_cli():
+def build_cli() -> argparse.ArgumentParser:
     _LOGGER.debug("Setting up CLI parser.")
-    parser = ArgumentParser()
+    parser = argparse.ArgumentParser()
 
     sp = parser.add_subparsers(dest="command", required=True)
     all_cmd = sp.add_parser("all")
@@ -99,9 +98,8 @@ def build_cli():
     _help = (
         "A path or glob to input BAM files."
         " This can include variables in curly brackets that will be replaced "
-        " with values from "
-        " the sample metadata (e.g. {sample_name}) or round1 metadata"
-        " (e.g. {plate_well})."
+        " with values from the sample metadata "
+        "(e.g. {sample_name}) or round1 metadata (e.g. {plate_well})."
         " Example: /lab/seq/{flowcell}/{flowcell}#*_{sample_name}.bam"
     )
     map_cmd.add_argument(
@@ -126,7 +124,7 @@ def build_cli():
     return parser
 
 
-def main(cli=None):
+def main(cli=None) -> int:
     _LOGGER.info("scifi-RNA-seq pipeline")
 
     # Parse arguments and config
@@ -205,3 +203,4 @@ def main(cli=None):
         if args.command in ["all", "report"]:
             _LOGGER.debug(f"Running report command with sample {sample_name}")
             return report_command(args)
+    return 0

@@ -9,28 +9,28 @@ Utilities for job submission and management by the scifi pipeline.
 import subprocess
 
 
-def job_shebang():
+def job_shebang() -> str:
     return '#!/bin/env bash\n\ndate\n'
 
 
-def print_parameters_during_job(job_params):
+def print_parameters_during_job(job_params) -> str:
     return "\n" + "\n".join([f"# {k} = {v}" for k, v in job_params.items()]) + "\n\n"
 
 
-def slurm_echo_array_task_id():
+def slurm_echo_array_task_id() -> str:
     return 'echo SLURM_ARRAY_TASK_ID = $SLURM_ARRAY_TASK_ID\n'
 
 
-def job_end():
+def job_end() -> str:
     return '\n\ndate\n\n'
 
 
-def write_job_to_file(job, job_file):
+def write_job_to_file(job, job_file) -> None:
     with open(job_file, "w") as handle:
         handle.write(job)
 
 
-def submit_job(job_file, params, array=None, cmd="sbatch"):
+def submit_job(job_file, params, array=None, cmd="sbatch") -> None:
     if array is not None:
         array = f"--array={array} -N 1\\\n"
     params.update({"job_file": job_file, "cmd": cmd})
@@ -42,5 +42,5 @@ def submit_job(job_file, params, array=None, cmd="sbatch"):
     subprocess.Popen(cmd.split(" "))
 
 
-def capture_slurm_job():
-    pass
+# def capture_slurm_job():
+#     pass

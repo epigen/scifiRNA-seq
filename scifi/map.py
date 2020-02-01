@@ -6,6 +6,7 @@ The main command and supporting functions for the mapping step of scifi pipeline
 """
 
 import os
+import argparse
 import pandas as pd
 from glob import glob
 from textwrap import dedent
@@ -17,7 +18,12 @@ from scifi.job_control import (
     job_end, write_job_to_file, submit_job)
 
 
-def map_command(args, sample_name, sample_out_dir, r1_annotation, config):
+def map_command(
+        args: argparse.Namespace,
+        sample_name: str,
+        sample_out_dir: str,
+        r1_annotation: pd.DataFrame,
+        config: dict):
     _LOGGER.debug(f"Running map command for sample '{sample_name}'")
     map_params = dict(
         cpus=4,
@@ -67,8 +73,8 @@ def map_command(args, sample_name, sample_out_dir, r1_annotation, config):
             cmd += print_parameters_during_job(params)
             cmd += star_cmd(
                 prefix=out_prefix, input_bams=bam_files,
-                star_genome_dir=config.star_genome_dir,
-                cpus=4, star_exe=config.star_exe)
+                star_genome_dir=config['star_genome_dir'],
+                cpus=4, star_exe=config['star_exe'])
             cmd += feature_counts_cmd(
                 gtf_file=args.gtf_file, prefix=out_prefix,
                 cpus=4, exon=False)
@@ -104,8 +110,8 @@ def map_command(args, sample_name, sample_out_dir, r1_annotation, config):
             cmd += print_parameters_during_job(params)
             cmd += star_cmd(
                 prefix=None, input_bams=None,
-                star_genome_dir=config.star_genome_dir,
-                cpus=4, star_exe=config.star_exe)
+                star_genome_dir=config['star_genome_dir'],
+                cpus=4, star_exe=config['star_exe'])
             cmd += feature_counts_cmd(
                 prefix=out_prefix, gtf_file=args.gtf_file,
                 cpus=4, exon=False)
@@ -116,6 +122,7 @@ def map_command(args, sample_name, sample_out_dir, r1_annotation, config):
             cmd += job_end()
             write_job_to_file(cmd, job)
             submit_job(job, params)
+    return 0
 
 
 def write_array_params(params, array_file):
