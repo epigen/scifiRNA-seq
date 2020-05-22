@@ -104,6 +104,15 @@ from two organisms. Use `1` or `0` for this column.
 on the actual number of reported cells but is used as a comparison to that.
 
 A special boolean column `toggle` can be used to select/deselect samples at runtime.
+Any other columns may be added but will not be used by the pipeline.
+
+Example:
+
+```csv
+sample_name,toggle,protocol,batch,cell_line,cell_number,material,organism,flowcell,variables
+scifi-RNA-seq_PDXYZ_SAMPLE_X_200k-nuclei,0,scifiRNA-seq,SCI004,Jurkat,200000,nuclei,human,BSF_XXXXX,"plate_well,treatment,knockout"
+scifi-RNA-seq_PDXYZ_SAMPLE_X_1M-nuclei,1,scifiRNA-seq,SCI004,Jurkat,1000000,nuclei,human,BSF_XXXXX,"plate_well,treatment,knockout"
+```
 
 #### Round1 plate well annotation
 
@@ -117,6 +126,16 @@ Mandatory columns are:
 Supplement this file with any additional columns to for example annotate
 experimental conditions. Add the name of those columns to the `variables` field
 of the sample CSV annotation file in order to have them used by the pipeline.
+
+Example:
+
+```csv
+sample_name,combinatorial_barcode,plate_well,treatment,knockout
+scifi-RNA-seq_PDXYZ_SAMPLE_X_1M-nuclei_A01,AAGTGATTAGCAA,A01,DMSO,knockoutA
+scifi-RNA-seq_PDXYZ_SAMPLE_X_1M-nuclei_A03,AGAATCCCCCTAA,A03,DMSO,knockoutB
+scifi-RNA-seq_PDXYZ_SAMPLE_X_1M-nuclei_A05,ACCTGGGAAACTA,A05,Gefitinib,knockoutA
+scifi-RNA-seq_PDXYZ_SAMPLE_X_1M-nuclei_A07,ATACCTCCCAGGA,A07,Gefitinib,knockoutB
+```
 
 ### Runnning
 
