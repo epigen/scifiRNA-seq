@@ -22,7 +22,7 @@ from scifi.utils import (
     plot_well_stats,
     cells_per_droplet_stats,
     write_gene_expression_matrix,
-    set_args
+    set_args,
 )
 
 
@@ -36,8 +36,7 @@ def parse_args():
     )
     parser.add_argument(
         dest="output_prefix",
-        help="Absolute path prefix for output files. "
-        "Example: 'results/SCIXX_experiment.'.",
+        help="Absolute path prefix for output files. " "Example: 'results/SCIXX_experiment.'.",
     )
     parser.add_argument(
         "--plotting-attributes",
@@ -73,15 +72,13 @@ def parse_args():
     parser.add_argument(
         "--nrows",
         dest="nrows",
-        help="An optional number of rows of input to process. "
-        "Useful for testing.",
+        help="An optional number of rows of input to process. " "Useful for testing.",
     )
     parser.add_argument(
         "--species-mixture",
         dest="species_mixture",
         action="store_true",
-        help="Whether the experiment is a species mixture. "
-        "Default is false.",
+        help="Whether the experiment is a species mixture. " "Default is false.",
     )
     parser.add_argument(
         "--expected-cell-number",
@@ -106,15 +103,19 @@ def parse_args():
     )
     default = os.path.join("metadata", "737K-cratac-v1.reverse_complement.csv")
     parser.add_argument(
-        "--r2-barcodes", dest="r2_barcodes", default=default,
-        help="Whilelist file with r2 barcodes."
-             f"Defaults to '{default}.")
+        "--r2-barcodes",
+        dest="r2_barcodes",
+        default=default,
+        help="Whilelist file with r2 barcodes." f"Defaults to '{default}.",
+    )
     choices = ["original", "reverse_complement"]
     parser.add_argument(
-        "--barcode-orientation", dest="barcode_orientation",
-        choices=choices, default=choices[0],
+        "--barcode-orientation",
+        dest="barcode_orientation",
+        choices=choices,
+        default=choices[0],
         help="Which orientation the r2 barcodes should be read as."
-             f"One of '{', '.join(choices)}'."
+        f"One of '{', '.join(choices)}'.",
     )
 
     # # Example:
@@ -153,13 +154,15 @@ def main():
         except (OSError, IOError, FileNotFoundError):
             msg = (
                 "Option --only-matching-barcodes given but value of "
-                f"--r2-barcodes could not be read: '{args.r2_barcodes}'")
+                f"--r2-barcodes could not be read: '{args.r2_barcodes}'"
+            )
             raise FileNotFoundError(msg)
         metrics = get_exact_matches(
             metrics,
-            barcodes=['r2'],
+            barcodes=["r2"],
             whitelists=[r2_barcodes[args.barcode_orientation]],
-            expected_cell_number=args.expected_cell_number)
+            expected_cell_number=args.expected_cell_number,
+        )
 
     # # Plot
     # # # Loglog line plot of rank vs abundance
@@ -173,9 +176,8 @@ def main():
     plot_efficiency(metrics, tail=t)
     plot_efficiency(metrics, tail=t, colour_by="unique_fraction")
     plot_efficiency(
-        metrics,
-        keys=['unique_fraction'],
-        log_scale=False, tail=t, suffix="reads_vs_unique")
+        metrics, keys=["unique_fraction"], log_scale=False, tail=t, suffix="reads_vs_unique"
+    )
 
     if args.species_mixture:
         plot_species_mixing(metrics)
@@ -189,9 +191,10 @@ def main():
             metrics
             # .tail(int(args.expected_cell_number / 2))
             .query("umi > 100")
-            .groupby(args.droplet_column)
-            [args.well_column].nunique()
-            .sort_values())
+            .groupby(args.droplet_column)[args.well_column]
+            .nunique()
+            .sort_values()
+        )
         cells_per_droplet.name = "cells_per_droplet"
         cells_per_droplet_stats(cells_per_droplet)
 
@@ -202,38 +205,46 @@ def main():
             .query("umi > 100")
             .set_index("r2")
             .join(cells_per_droplet)
-            .query("cells_per_droplet < 25"))
-        m.to_csv(args.output_prefix + 'cells_per_droplet_stats.csv')
+            .query("cells_per_droplet < 25")
+        )
+        m.to_csv(args.output_prefix + "cells_per_droplet_stats.csv")
 
-        attrs = [
-            ('read', True),
-            ('umi', True),
-            ('gene', True),
-            ('unique_fraction', False)]
+        attrs = [("read", True), ("umi", True), ("gene", True), ("unique_fraction", False)]
         fig, axis = plt.subplots(len(attrs), 1, figsize=(9, 3 * len(attrs)))
         for i, (attr, log) in enumerate(attrs):
-            sns.violinplot(m['cells_per_droplet'], m[attr], ax=axis[i])
+            sns.violinplot(m["cells_per_droplet"], m[attr], ax=axis[i])
             if log:
                 axis[i].set_yscale("log")
         fig.savefig(
             args.output_prefix + f"cells_per_droplet.packaging_vs_yield.violinplot.svg",
-            dpi=300, bbox_inches="tight")
+            dpi=300,
+            bbox_inches="tight",
+        )
 
         fig, axis = plt.subplots(len(attrs), 1, figsize=(9, 3 * len(attrs)))
         for i, (attr, log) in enumerate(attrs):
-            sns.boxplot(m['cells_per_droplet'], m[attr], fliersize=0, ax=axis[i])
+            sns.boxplot(m["cells_per_droplet"], m[attr], fliersize=0, ax=axis[i])
             if log:
                 axis[i].set_yscale("log")
         fig.savefig(
             args.output_prefix + f"cells_per_droplet.packaging_vs_yield.boxplot.svg",
-            dpi=300, bbox_inches="tight")
+            dpi=300,
+            bbox_inches="tight",
+        )
 
         if args.species_mixture:
             # Species mixing plot based on round2 only
             r2_metrics = metrics.groupby(args.droplet_column).agg(
-                {'human': np.sum, 'mouse': np.sum, 'total': np.sum,
-                 'human_norm': np.sum, 'total_norm': np.sum,
-                 'sp_ratio': np.mean, 'sp_ratio_norm': np.mean})
+                {
+                    "human": np.sum,
+                    "mouse": np.sum,
+                    "total": np.sum,
+                    "human_norm": np.sum,
+                    "total_norm": np.sum,
+                    "sp_ratio": np.mean,
+                    "sp_ratio_norm": np.mean,
+                }
+            )
             plot_species_mixing(r2_metrics, suffix="only_r2")
 
     # Write expression matrix in sparse format as H5AD

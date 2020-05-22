@@ -4,9 +4,9 @@ import sys
 
 
 def parse_requirements(req_file):
-    requirements = open(req_file).read().strip().split("\n")
-    requirements = [r for r in requirements if not r.startswith("#")]
-    return [r for r in requirements if "#egg=" not in r]
+    reqs = open(req_file).read().strip().split("\n")
+    reqs = [r for r in reqs if not r.startswith("#")]
+    return [r for r in reqs if "#egg=" not in r]
 
 
 # take care of extra required modules depending on Python version
@@ -39,25 +39,21 @@ setup(
     name="scifi",
     packages=find_packages(),
     use_scm_version={
-        'write_to': 'scifi/_version.py',
-        'write_to_template': '__version__ = "{version}"\n'
+        "write_to": "scifi/_version.py",
+        "write_to_template": '__version__ = "{version}"\n',
     },
-    entry_points={
-        "console_scripts": [
-            "scifi = scifi:pipeline.main"]
-    },
+    entry_points={"console_scripts": ["scifi = scifi:pipeline.main"]},
     description="A processing pipeline for scifiRNA-seq data.",
     long_description=long_description,
     long_description_content_type="text/markdown",
     classifiers=[
         "Development Status :: 3 - Alpha",
-        "License :: OSI Approved :: "
-        "GNU General Public License v3 or later (GPLv3+)",
+        "Programming Language :: Python :: 3 :: Only",
         "Programming Language :: Python :: 3.7",
+        "License :: OSI Approved :: " "GNU General Public License v3 or later (GPLv3+)",
         "Topic :: Scientific/Engineering :: Bio-Informatics",
     ],
-    keywords="bioinformatics, sequencing, ngs, ngs analysis, "
-             "single cell, RNA-seq, scRNA-seq",
+    keywords="bioinformatics, sequencing, ngs, ngs analysis, " "single cell, RNA-seq, scRNA-seq",
     url="https://github.com/epigen/scifiRNA-seq",
     project_urls={
         "Bug Tracker": "https://github.com/epigen/scifiRNA-seq/issues",
@@ -67,7 +63,7 @@ setup(
     author=u"Andre Rendeiro",
     author_email="andre.rendeiro@pm.me",
     license="GPL3",
-    setup_requires=['setuptools_scm'],
+    setup_requires=["setuptools_scm"],
     install_requires=requirements,
     # tests_require=requirements_test,
     extras_require={

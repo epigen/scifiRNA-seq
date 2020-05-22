@@ -19,89 +19,144 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scipy
+from scipy.sparse import csr_matrix
+from scipy.special import factorial
 import seaborn as sns
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+import pysam
+import anndata as an
+from joblib import Parallel, delayed
+import multiprocessing
 
 
 def parse_args(cli=None):
     parser = ArgumentParser()
     parser.add_argument(
-        dest="input_files", nargs="+",
+        dest="input_files",
+        nargs="+",
         help="Input BAM files to summarize. "
-             "Can be several files or a regex that evaluates to several files.")
+        "Can be several files or a regex that evaluates to several files.",
+    )
     parser.add_argument(
         dest="output_prefix",
-        help="Absolute path prefix for output files. "
-             "Example: 'results/SCIXX_experiment.'.")
+        help="Absolute path prefix for output files. " "Example: 'results/SCIXX_experiment.'.",
+    )
     parser.add_argument(
-        "--sample-name", dest="sample_name",
-        help="Simple name to label output files. "
-             "Defaults to same as 'output_prefix' option.")
+        "--sample-name",
+        dest="sample_name",
+        help="Simple name to label output files. " "Defaults to same as 'output_prefix' option.",
+    )
     parser.add_argument(
-        "--cell-barcodes", dest="cell_barcodes", default=["r1", "r2"], nargs="+",
+        "--cell-barcodes",
+        dest="cell_barcodes",
+        default=["r1", "r2"],
+        nargs="+",
         help="Which barcodes to take into consideration to group molecules by. "
-             "Defaults to 'r1 r2'.")
+        "Defaults to 'r1 r2'.",
+    )
     root = os.path.expanduser("~/projects/sci-rna")
     parser.add_argument(
-        "--r1-annot", dest="r1_annotation_file",
-        help="CSV file with annotations of r1 barcodes. ", required=True)
+        "--r1-annot",
+        dest="r1_annotation_file",
+        help="CSV file with annotations of r1 barcodes. ",
+        required=True,
+    )
     parser.add_argument(
-        "--r1-attributes", dest="r1_attributes", type=str,
-        help="Which r1 attributes to annotate cells with. A comma-separated list.")
+        "--r1-attributes",
+        dest="r1_attributes",
+        type=str,
+        help="Which r1 attributes to annotate cells with. A comma-separated list.",
+    )
     default = os.path.join(root, "metadata", "737K-cratac-v1.reverse_complement.csv")
     parser.add_argument(
-        "--r2-barcodes", dest="r2_barcodes", default=default,
-        help="Whilelist file with r2 barcodes."
-             f"Defaults to '{default}.")
+        "--r2-barcodes",
+        dest="r2_barcodes",
+        default=default,
+        help="Whilelist file with r2 barcodes." f"Defaults to '{default}.",
+    )
     choices = ["original", "reverse_complement"]
     parser.add_argument(
-        "--barcode-orientation", dest="barcode_orientation", choices=choices, default=choices[0],
-        help="Which orientation the r2 barcodes should be read as."
-             f" Defaults to '{choices[0]}'."
+        "--barcode-orientation",
+        dest="barcode_orientation",
+        choices=choices,
+        default=choices[0],
+        help="Which orientation the r2 barcodes should be read as." f" Defaults to '{choices[0]}'.",
     )
     default = ["read", "r2", "umi", "gene", "pos"]
     parser.add_argument(
-        "--input-header", dest="input_header", default=default,
-        help=f"Columns of input_files. Defautlts to '{''.join(default)}'.")
-    parser.add_argument(
-        "--no-output-header", dest="no_output_header", action="store_true",
-        help="Whether not to output a header. Defaults to not to.")
-    parser.add_argument(
-        "--nrows", dest="nrows", type=int, default=int(1e10),
-        help="Number of input rows to process. Useful for testing.")
-    parser.add_argument(
-        "--only-summary", dest="only_summary", action="store_true",
-        help="Only output summary, no plots.")
-    parser.add_argument(
-        "--species-mixture", dest="species_mixture", action="store_true",
-        help="Whether experiment is a species mixing."
+        "--input-header",
+        dest="input_header",
+        default=default,
+        help=f"Columns of input_files. Defautlts to '{''.join(default)}'.",
     )
     parser.add_argument(
-        "--expected-cell-number", dest="expected_cell_number", default=200000, type=int,
-        help="Number of expected cells. Only used if plotting."
+        "--no-output-header",
+        dest="no_output_header",
+        action="store_true",
+        help="Whether not to output a header. Defaults to not to.",
     )
     parser.add_argument(
-        "--no-save-intermediate", dest="no_save_intermediate", action="store_true",
-        help="Whether to skip saving of intermediate results."
+        "--nrows",
+        dest="nrows",
+        type=int,
+        default=int(1e10),
+        help="Number of input rows to process. Useful for testing.",
     )
     parser.add_argument(
-        "--min-umi-output", dest="min_umi_output", default=1, type=int,
-        help="Minimum UMIs per barcode to output."
+        "--only-summary",
+        dest="only_summary",
+        action="store_true",
+        help="Only output summary, no plots.",
     )
     parser.add_argument(
-        "--save-gene-expression", dest="save_gene_expression", action="store_true",
-        help="Whether to create a gene expression matrix."
+        "--species-mixture",
+        dest="species_mixture",
+        action="store_true",
+        help="Whether experiment is a species mixing.",
     )
     parser.add_argument(
-        "--correct-r1-barcodes", dest="correct_r1_barcodes", action="store_true",
-        help="Whether set all r1 barcodes to the respective sequence from annotation."
+        "--expected-cell-number",
+        dest="expected_cell_number",
+        default=200000,
+        type=int,
+        help="Number of expected cells. Only used if plotting.",
     )
     parser.add_argument(
-        "--correct-r2-barcodes", dest="correct_r2_barcodes", action="store_true",
-        help="Whether to use a mapping of existing barcodes to correct r2 barcodes."
+        "--no-save-intermediate",
+        dest="no_save_intermediate",
+        action="store_true",
+        help="Whether to skip saving of intermediate results.",
     )
     parser.add_argument(
-        "--correct-r2-barcode-file", dest="correct_r2_barcode_file",
-        help="File containing mapping between existing barcodes and correct barcodes."
+        "--min-umi-output",
+        dest="min_umi_output",
+        default=1,
+        type=int,
+        help="Minimum UMIs per barcode to output.",
+    )
+    parser.add_argument(
+        "--save-gene-expression",
+        dest="save_gene_expression",
+        action="store_true",
+        help="Whether to create a gene expression matrix.",
+    )
+    parser.add_argument(
+        "--correct-r1-barcodes",
+        dest="correct_r1_barcodes",
+        action="store_true",
+        help="Whether set all r1 barcodes to the respective sequence from annotation.",
+    )
+    parser.add_argument(
+        "--correct-r2-barcodes",
+        dest="correct_r2_barcodes",
+        action="store_true",
+        help="Whether to use a mapping of existing barcodes to correct r2 barcodes.",
+    )
+    parser.add_argument(
+        "--correct-r2-barcode-file",
+        dest="correct_r2_barcode_file",
+        help="File containing mapping between existing barcodes and correct barcodes.",
     )
 
     # # Example run:
@@ -233,10 +288,10 @@ def main(cli=None):
     annotation = pd.read_csv(args.r1_annotation_file)
     r2_barcodes = pd.read_csv(args.r2_barcodes)
     attrs = (
-        annotation
-        .query(f"sample_name == '{args.sample_name}'")
+        annotation.query(f"sample_name == '{args.sample_name}'")
         .set_index("combinatorial_barcode")[args.r1_attributes]
-        .squeeze(axis=0))
+        .squeeze(axis=0)
+    )
 
     # read text files
     df = parse_data(args.input_files, nrows=args.nrows)
@@ -246,7 +301,7 @@ def main(cli=None):
     # correct r1 barcodes
     if args.correct_r1_barcodes:
         print(f"# {time.asctime()} - Updating r1 barcodes to the sequence of the well.")
-        df['r1'] = attrs.name
+        df["r1"] = attrs.name
         # df['r1'] = df['r1'].value_counts().idxmax()
 
     # correct r2 barcodes
@@ -257,28 +312,26 @@ def main(cli=None):
         mapping = mapping.dropna().set_index(0).squeeze().to_dict()
 
         # update
-        unmatch = ~df['r2'].isin(r2_barcodes[args.barcode_orientation])
-        df.loc[unmatch, 'r2'] = [
-            mapping[x]
-            if x in mapping else x
-            for x in df.loc[unmatch, 'r2']]
+        unmatch = ~df["r2"].isin(r2_barcodes[args.barcode_orientation])
+        df.loc[unmatch, "r2"] = [mapping[x] if x in mapping else x for x in df.loc[unmatch, "r2"]]
         args.output_suffix = "_corrected"
 
     nr = df.isnull().sum().sum()
     if nr > 0:
         print(f"# {time.asctime()} - Found {nr} null reads. Dropping those.")
         df = df.dropna()
-    if 'int' not in str(df.dtypes['pos']):
+    if "int" not in str(df.dtypes["pos"]):
         df.loc[:, "pos"] = df.loc[:, "pos"].astype(int)
 
     # Save bulk profile
     print(f"# {time.asctime()} - Saving bulk expression profile.")
     (
-        df['gene'].value_counts()
+        df["gene"]
+        .value_counts()
         .sort_values(ascending=False)
         .to_frame(name=args.sample_name)
-        .to_csv(
-            os.path.join(args.output_prefix + "bulk_expression_profile.csv")))
+        .to_csv(os.path.join(args.output_prefix + "bulk_expression_profile.csv"))
+    )
 
     # Gather metrics per cell
     r1_annotation = None
@@ -290,24 +343,26 @@ def main(cli=None):
         r1_annotation=r1_annotation,
         species_mixture=args.species_mixture,
         save_intermediate=args.save_intermediate,
-        suffix=args.output_suffix)
+        suffix=args.output_suffix,
+    )
 
     if "r1" not in args.cell_barcodes:
         # Add required attributes
         metrics = metrics.assign(**dict(zip(attrs.index, attrs.values)))
 
     # Save
-    int_cols = ['read', 'unique_umis', 'umi', 'gene']
+    int_cols = ["read", "unique_umis", "umi", "gene"]
     metrics.loc[:, int_cols] = metrics.loc[:, int_cols].astype(int)
     if not args.output_header:
         print(f"# {time.asctime()} - Not outputing header in file, but header is the following:")
         print(f"# {time.asctime()} - {metrics.columns}")
     (
-        metrics
-        .query(f"umi > {args.min_umi_output}")
-        .to_csv(
+        metrics.query(f"umi > {args.min_umi_output}").to_csv(
             args.output_prefix + "metrics" + args.output_suffix + ".csv.gz",
-            float_format='%.3f', header=args.output_header))
+            float_format="%.3f",
+            header=args.output_header,
+        )
+    )
 
     if "r1" in args.cell_barcodes:
         # # now the same only for exactly matching barcodes
@@ -316,19 +371,22 @@ def main(cli=None):
             r1_whitelist=annotation["combinatorial_barcode"],
             r2_whitelist=r2_barcodes[args.barcode_orientation],
             save_intermediate=args.save_intermediate,
-            plot=not args.only_summary)
-        metrics_filtered = metrics_filtered.assign(
-            **dict(zip(attrs.index, attrs.values)))
+            plot=not args.only_summary,
+        )
+        metrics_filtered = metrics_filtered.assign(**dict(zip(attrs.index, attrs.values)))
         metrics_filtered.loc[:, int_cols] = metrics_filtered.loc[:, int_cols].astype(int)
         if not args.output_header:
-            print(f"# {time.asctime()} - Not outputing header in file, but header is the following:")
+            print(
+                f"# {time.asctime()} - Not outputing header in file, but header is the following:"
+            )
             print(f"# {time.asctime()} - {metrics_filtered.columns}")
         (
-            metrics_filtered
-            .query(f"umi > {args.min_umi_output}")
-            .to_csv(
+            metrics_filtered.query(f"umi > {args.min_umi_output}").to_csv(
                 args.output_prefix + "metrics" + args.output_suffix + "_filtered.csv.gz",
-                float_format='%.3f', header=args.output_header))
+                float_format="%.3f",
+                header=args.output_header,
+            )
+        )
 
     if args.only_summary:
         return
@@ -345,9 +403,7 @@ def main(cli=None):
     plot_efficiency(metrics, tail=t, colour_by="unique_fraction")
     if "r1" in args.cell_barcodes:
         plot_efficiency(metrics_filtered, tail=t, suffix="exact_match")
-        plot_efficiency(
-            metrics_filtered, tail=t, suffix="exact_match", colour_by="unique_fraction"
-        )
+        plot_efficiency(metrics_filtered, tail=t, suffix="exact_match", colour_by="unique_fraction")
 
     if args.species_mixture:
         plot_species_mixing(metrics)
@@ -364,7 +420,6 @@ def main(cli=None):
 
 
 def parse_data(files, nrows=1e10):
-    import pysam
 
     print(f"# {time.asctime()} - Parsing files.")
     pieces = list()
@@ -381,18 +436,21 @@ def parse_data(files, nrows=1e10):
             if "Unassigned" in read.get_tag("XS"):
                 continue
 
-            gene = read.get_tag('XT', with_value_type=True)
-            if gene[1] == 'i':
+            gene = read.get_tag("XT", with_value_type=True)
+            if gene[1] == "i":
                 try:
                     gene = [
-                        x[1] for x in read.get_tags(with_value_type=True)
-                        if x[0] == 'XT'
-                        and x[2] == 'Z']
+                        x[1]
+                        for x in read.get_tags(with_value_type=True)
+                        if x[0] == "XT" and x[2] == "Z"
+                    ]
                     # print(f"# {time.asctime()} - Found read with double XT tag"
                     #       f" (gene assignemnt): {read.qname}. Fixed it.")
                 except IndexError:
-                    print(f"# {time.asctime()} - Found read with non character"
-                          f" gene assignemnt: {read.qname}. Skipping it.")
+                    print(
+                        f"# {time.asctime()} - Found read with non character"
+                        f" gene assignemnt: {read.qname}. Skipping it."
+                    )
                     continue
 
             piece = [
@@ -403,12 +461,13 @@ def parse_data(files, nrows=1e10):
                 read.get_tag("r2"),
                 read.get_tag("RX"),
                 gene[0],
-                read.pos]
+                read.pos,
+            ]
             pieces.append(piece)
         print(f"# {time.asctime()} - Done with file {file}. {i} lines.")
 
     print(f"# {time.asctime()} - Concatenating parts.")
-    return pd.DataFrame(pieces, columns=['read', 'r1', 'r2', 'umi', 'gene', 'pos'])
+    return pd.DataFrame(pieces, columns=["read", "r1", "r2", "umi", "gene", "pos"])
 
 
 def gather_stats_per_cell(
@@ -424,9 +483,7 @@ def gather_stats_per_cell(
 
     # performance metrics
     # # number of unique reads per cell
-    reads_per_cell = (
-        df.groupby(args.cell_barcodes, sort=False)["read"].nunique().sort_values()
-    )
+    reads_per_cell = df.groupby(args.cell_barcodes, sort=False)["read"].nunique().sort_values()
     if save_intermediate:
         to_pickle(reads_per_cell, "reads_per_cell" + suffix)
 
@@ -434,10 +491,7 @@ def gather_stats_per_cell(
     # TODO: add mapping rate per cell (needs additional file)
 
     # # duplication per cell
-    reads_per_umi = (
-        df.groupby(
-            args.cell_barcodes + ["gene", "pos"], sort=False)
-        ["umi"].size())
+    reads_per_umi = df.groupby(args.cell_barcodes + ["gene", "pos"], sort=False)["umi"].size()
     reads_per_umi = reads_per_umi.reset_index(level=["gene", "pos"], drop=True)
     if save_intermediate:
         to_pickle(reads_per_umi, "reads_per_umi" + suffix)
@@ -448,19 +502,19 @@ def gather_stats_per_cell(
         to_pickle(unique_per_cell, "unique_per_cell" + suffix)
 
     # # UMI count per cell
-    umi_counts = df.groupby(args.cell_barcodes + ["gene", "pos"], sort=False)[
-        "umi"
-    ].nunique()
+    umi_counts = df.groupby(args.cell_barcodes + ["gene", "pos"], sort=False)["umi"].nunique()
     if args.save_gene_expression:
         print(f"# {time.asctime()} - Writing gene expression.")
         (
-            umi_counts
-            .reset_index(level='pos', drop=True).reset_index()
+            umi_counts.reset_index(level="pos", drop=True)
+            .reset_index()
             # Add required attributes
             .assign(**dict(zip(attrs.index, attrs.values)))
             .to_csv(
                 args.output_prefix + "expression" + suffix + ".csv.gz",
-                index=False, header=args.output_header)
+                index=False,
+                header=args.output_header,
+            )
         )
 
     if save_intermediate:
@@ -502,16 +556,14 @@ def gather_stats_per_cell(
         spc = spc.assign(
             ratio=spc["max"] / spc["total"], sp_ratio=spc["human"] / spc["total"]
         ).sort_values("total")
-        spc = spc.assign(
-            doublet=(spc["ratio"] < doublet_threshold).astype(int).replace(0, -1)
-        )
+        spc = spc.assign(doublet=(spc["ratio"] < doublet_threshold).astype(int).replace(0, -1))
         if save_intermediate:
             to_pickle(spc, "spc" + suffix)
 
         # # per read
-        read_counts = df.groupby(args.cell_barcodes + ["gene"], sort=False)[
-            "read"
-        ].count().reset_index()
+        read_counts = (
+            df.groupby(args.cell_barcodes + ["gene"], sort=False)["read"].count().reset_index()
+        )
         read_counts = read_counts.assign(
             species=(
                 read_counts["gene"]
@@ -528,7 +580,8 @@ def gather_stats_per_cell(
         spc_read += 1
         spc_read = spc_read.assign(read_total=spc_read.sum(1), read_max=spc_read.max(1))
         spc_read = spc_read.assign(
-            read_ratio=spc_read["read_max"] / spc_read["read_total"], read_sp_ratio=spc_read["read_human"] / spc_read["read_total"]
+            read_ratio=spc_read["read_max"] / spc_read["read_total"],
+            read_sp_ratio=spc_read["read_human"] / spc_read["read_total"],
         ).sort_values("read_total")
         spc_read = spc_read.assign(
             read_doublet=(spc_read["read_ratio"] < doublet_threshold).astype(int).replace(0, -1)
@@ -539,10 +592,7 @@ def gather_stats_per_cell(
     print(f"# {time.asctime()} - Joining all metrics.")
     # TODO: speed up by assigning to column using equallly sorted indexes
     metrics = (
-        reads_per_cell.to_frame()
-        .join(unique_per_cell)
-        .join(umis_per_cell)
-        .join(genes_per_cell)
+        reads_per_cell.to_frame().join(unique_per_cell).join(umis_per_cell).join(genes_per_cell)
     )
 
     if species_mixture:
@@ -686,8 +736,6 @@ def gather_stats_per_cell(
 
 
 def write_gene_expression_matrix(output_file=None, top_cells=None):
-    from scipy.sparse import csr_matrix
-    import anndata as an
 
     print(f"# {time.asctime()} - Producing sparse expression matrix.")
 
@@ -709,9 +757,7 @@ def write_gene_expression_matrix(output_file=None, top_cells=None):
 
     print(f"# {time.asctime()} - Creating AnnData object.")
     a = an.AnnData(
-        csr_matrix(
-            (c2["umi"], (cell, gene)), shape=(len(unique_cell), len(unique_gene))
-        ),
+        csr_matrix((c2["umi"], (cell, gene)), shape=(len(unique_cell), len(unique_gene))),
         dtype=np.int,
     )
     a.obs.index = unique_cell
@@ -722,8 +768,6 @@ def write_gene_expression_matrix(output_file=None, top_cells=None):
 
 
 def write_full_gene_expression_matrix(output_file=None, top_cells=None):
-    from scipy.sparse import csr_matrix
-    import anndata as an
 
     print(f"# {time.asctime()} - Producing sparse expression matrix.")
 
@@ -736,13 +780,11 @@ def write_full_gene_expression_matrix(output_file=None, top_cells=None):
 
     print(f"# {time.asctime()} - Creating AnnData object.")
     a = an.AnnData(
-        csr_matrix(
-            (c2["umi"], (cell, gene)), shape=(len(unique_cell), len(unique_gene))
-        ),
+        csr_matrix((c2["umi"], (cell, gene)), shape=(len(unique_cell), len(unique_gene))),
         dtype=np.int,
     )
     a.obs.index = unique_cell
-    c3 = c2.set_index('r2')[['sample_name', 'donor_id', 'well']].drop_duplicates()
+    c3 = c2.set_index("r2")[["sample_name", "donor_id", "well"]].drop_duplicates()
     a.obs = a.obs.join(c3)
     a.var.index = unique_gene
 
@@ -763,9 +805,7 @@ def gather_stats_per_cell_as_droplet(
 
     # performance metrics
     # # UMI count per cell
-    umi_counts = df.groupby(cell_barcodes + ["gene", "pos"], sort=False)[
-        "umi"
-    ].nunique()
+    umi_counts = df.groupby(cell_barcodes + ["gene", "pos"], sort=False)["umi"].nunique()
     if save_intermediate:
         to_pickle(umi_counts, "umi_counts" + suffix)
 
@@ -794,9 +834,7 @@ def gather_stats_per_cell_as_droplet(
     spc = spc.assign(
         ratio=spc["max"] / spc["total"], sp_ratio=spc["human"] / spc["total"]
     ).sort_values("total")
-    spc = spc.assign(
-        doublet=(spc["ratio"] < doublet_threshold).astype(int).replace(0, -1)
-    )
+    spc = spc.assign(doublet=(spc["ratio"] < doublet_threshold).astype(int).replace(0, -1))
     if save_intermediate:
         to_pickle(spc, "spc" + suffix)
 
@@ -818,15 +856,11 @@ def gather_stats_per_cell_as_droplet(
     r = pd.Series(r).sort_index()
 
     # Add normalized metrics to stats
-    metrics_r2.loc[:, "human_norm"] = (
-        metrics_r2["human"] * r[int(args.expected_cell_number)]
-    )
+    metrics_r2.loc[:, "human_norm"] = metrics_r2["human"] * r[int(args.expected_cell_number)]
     metrics_r2.loc[:, "total_norm"] = metrics_r2[["mouse", "human_norm"]].sum(1)
     metrics_r2.loc[:, "max_norm"] = metrics_r2[["mouse", "human_norm"]].max(1)
     metrics_r2.loc[:, "ratio_norm"] = metrics_r2["max_norm"] / metrics_r2["total_norm"]
-    metrics_r2.loc[:, "sp_ratio_norm"] = (
-        metrics_r2["human_norm"] / metrics_r2["total_norm"]
-    )
+    metrics_r2.loc[:, "sp_ratio_norm"] = metrics_r2["human_norm"] / metrics_r2["total_norm"]
     metrics_r2.loc[:, "doublet_norm"] = (
         (metrics_r2.loc[:, "ratio_norm"] < doublet_threshold).astype(int).replace(0, -1)
     )
@@ -852,13 +886,9 @@ def gather_stats_per_cell_as_droplet(
     metrics2 = metrics_r2.tail(int(10 * args.expected_cell_number))
 
     for label in ["", ".log"]:
-        fig, axis = plt.subplots(
-            1, 2, figsize=(2 * 3, 1 * 3), tight_layout=True, squeeze=False
-        )
+        fig, axis = plt.subplots(1, 2, figsize=(2 * 3, 1 * 3), tight_layout=True, squeeze=False)
         kwargs = {"s": 0.1, "alpha": 0.2, "rasterized": True, "cmap": get_custom_cmap()}
-        axis[0, 0].scatter(
-            metrics2["mouse"], metrics2["human"], c=metrics2["sp_ratio"], **kwargs
-        )
+        axis[0, 0].scatter(metrics2["mouse"], metrics2["human"], c=metrics2["sp_ratio"], **kwargs)
         # axis[0, 1].scatter(metrics2['mouse'], metrics2['human'], c=metrics2['sp_ratio_norm'], **kwargs)
         v = metrics2[["mouse", "human"]].quantile(0.999).max()
         v += v * 0.1
@@ -894,12 +924,7 @@ def gather_stats_per_cell_as_droplet(
 
 
 def plot_metrics_lineplot(
-    metrics,
-    keys=["read", "umi", "gene"],
-    tail=None,
-    suffix="",
-    by_group=None,
-    always_legend=False,
+    metrics, keys=["read", "umi", "gene"], tail=None, suffix="", by_group=None, always_legend=False,
 ):
     def min_max(x):
         return (x - x.min()) / (x.max() - x.min())
@@ -944,15 +969,11 @@ def plot_metrics_lineplot(
             # add legend only to one panel if requested
             if (by_group != "dummy") and (always_legend or ((i == 0) and (l == 1))):
                 ax.legend(
-                    bbox_to_anchor=(1.05, 1),
-                    loc="upper left",
-                    borderaxespad=0.0,
-                    ncol=1,
+                    bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0.0, ncol=1,
                 )
                 # ax.legend_.set_in_layout(False)
     fig.savefig(
-        args.output_prefix
-        + f"metrics_per_cell.lineplot.{suffix}.svg".replace("..", "."),
+        args.output_prefix + f"metrics_per_cell.lineplot.{suffix}.svg".replace("..", "."),
         dpi=300,
         bbox_inches="tight",
     )
@@ -994,8 +1015,7 @@ def plot_metrics_distplot(
         if by_group != "dummy":
             axis[i].legend()
     fig.savefig(
-        args.output_prefix
-        + f"metrics_per_cell.distplot.{suffix}.svg".replace("..", "."),
+        args.output_prefix + f"metrics_per_cell.distplot.{suffix}.svg".replace("..", "."),
         dpi=300,
         bbox_inches="tight",
     )
@@ -1027,13 +1047,7 @@ def plot_efficiency(
         n = 1
 
     fig, axis = plt.subplots(
-        n,
-        2,
-        figsize=(2 * 4, n * 4),
-        tight_layout=True,
-        squeeze=False,
-        sharex="col",
-        sharey="col",
+        n, 2, figsize=(2 * 4, n * 4), tight_layout=True, squeeze=False, sharex="col", sharey="col",
     )
     fig.suptitle(f"Experiment performance: {args.sample_name}", ha="center")
     for i, group in enumerate(groups):
@@ -1093,22 +1107,14 @@ def plot_efficiency(
                 axis[i, j].axvline(v, linestyle="--", color="black", linewidth=0.5)
     fig.savefig(
         args.output_prefix
-        + f"performance_per_cell.scatter.coloured_by_{colour_by}.{suffix}.svg".replace(
-            "..", "."
-        ),
+        + f"performance_per_cell.scatter.coloured_by_{colour_by}.{suffix}.svg".replace("..", "."),
         dpi=300,
         bbox_inches="tight",
     )
 
 
 def plot_species_mixing(
-    metrics,
-    norm=False,
-    tail=None,
-    suffix="",
-    cmaps=None,
-    zoom_in_area=3000,
-    axislims=10000,
+    metrics, norm=False, tail=None, suffix="", cmaps=None, zoom_in_area=3000, axislims=10000,
 ):
     print(f"# {time.asctime()} - Plotting species mixtures.")
     if tail is None:
@@ -1120,22 +1126,14 @@ def plot_species_mixing(
         suffix += "_norm"
 
     if cmaps is None:
-        cmaps = [
-            get_custom_cmap()
-        ]  # , plt.get_cmap("coolwarm"), plt.get_cmap("Spectral_r")]
+        cmaps = [get_custom_cmap()]  # , plt.get_cmap("coolwarm"), plt.get_cmap("Spectral_r")]
     for attr, label, kwargs in [
-        (
-            "sp_ratio_norm" if norm else "sp_ratio",
-            "coloured_by_ratio",
-            {"vmin": 0, "vmax": 1},
-        ),
+        ("sp_ratio_norm" if norm else "sp_ratio", "coloured_by_ratio", {"vmin": 0, "vmax": 1},),
         # ('doublet_norm' if norm else 'doublet', 'coloured_by_doublet', {"vmin": -1, "vmax": 1}),
     ]:
         for cmap in cmaps:
             n_panels = 4
-            fig, axis = plt.subplots(
-                1, n_panels, figsize=(n_panels * 4, 4), tight_layout=True
-            )
+            fig, axis = plt.subplots(1, n_panels, figsize=(n_panels * 4, 4), tight_layout=True)
             for ax in axis[:3]:
                 col = ax.scatter(
                     metrics["mouse"],
@@ -1186,9 +1184,7 @@ def gather_stats_per_well(metrics, seq_content=False, save_intermediate=True):
         to_pickle(umis_per_well, "umis_per_well")
 
     # # # see how many droplets per well
-    droplets_per_well = (
-        metrics.reset_index().groupby("r1")["r2"].nunique().sort_values()
-    )
+    droplets_per_well = metrics.reset_index().groupby("r1")["r2"].nunique().sort_values()
     droplets_per_well.name = "droplets"
     if save_intermediate:
         to_pickle(droplets_per_well, "droplets_per_well")
@@ -1211,9 +1207,7 @@ def gather_stats_per_well(metrics, seq_content=False, save_intermediate=True):
     return well_metrics
 
 
-def get_exact_matches(
-    metrics, r1_whitelist, r2_whitelist, save_intermediate=True, plot=True
-):
+def get_exact_matches(metrics, r1_whitelist, r2_whitelist, save_intermediate=True, plot=True):
     print(f"# {time.asctime()} - Filtering for exact barcode matches.")
 
     # Note to self, if metrics has r1_annotations, one could simply do isnull() to get barcodes matching r1
@@ -1223,10 +1217,10 @@ def get_exact_matches(
 
     print(r1_match.sum() / r1_match.shape[0])
     print(r2_match.sum() / r2_match.shape[0])
-    print(metrics.loc[r1_match, 'read'].sum() / metrics['read'].sum())
-    print(metrics.loc[r2_match, 'read'].sum() / metrics['read'].sum())
-    print(metrics.loc[r1_match, 'umi'].sum() / metrics['umi'].sum())
-    print(metrics.loc[r2_match, 'umi'].sum() / metrics['umi'].sum())
+    print(metrics.loc[r1_match, "read"].sum() / metrics["read"].sum())
+    print(metrics.loc[r2_match, "read"].sum() / metrics["read"].sum())
+    print(metrics.loc[r1_match, "umi"].sum() / metrics["umi"].sum())
+    print(metrics.loc[r2_match, "umi"].sum() / metrics["umi"].sum())
 
     r1_match = metrics.index.get_level_values("r1").isin(r1_whitelist)
     r2_match = metrics.index.get_level_values("r2").isin(r2_whitelist)
@@ -1236,13 +1230,13 @@ def get_exact_matches(
     tmetrics = metrics.tail(200000)
     print(tr1_match.sum() / tr1_match.shape[0])
     print(tr2_match.sum() / tr2_match.shape[0])
-    print(tmetrics.loc[tr1_match, 'read'].sum() / tmetrics['read'].sum())
-    print(tmetrics.loc[tr2_match, 'read'].sum() / tmetrics['read'].sum())
-    print(tmetrics.loc[tr1_match, 'umi'].sum() / tmetrics['umi'].sum())
-    print(tmetrics.loc[tr2_match, 'umi'].sum() / tmetrics['umi'].sum())
+    print(tmetrics.loc[tr1_match, "read"].sum() / tmetrics["read"].sum())
+    print(tmetrics.loc[tr2_match, "read"].sum() / tmetrics["read"].sum())
+    print(tmetrics.loc[tr1_match, "umi"].sum() / tmetrics["umi"].sum())
+    print(tmetrics.loc[tr2_match, "umi"].sum() / tmetrics["umi"].sum())
 
-    print(tmetrics['read'].sum() / metrics['read'].sum())
-    print(tmetrics['umi'].sum() / metrics['umi'].sum())
+    print(tmetrics["read"].sum() / metrics["read"].sum())
+    print(tmetrics["umi"].sum() / metrics["umi"].sum())
 
     if save_intermediate:
         to_pickle(r1_match, "r1_match", array=False)
@@ -1282,9 +1276,7 @@ def get_exact_matches(
         aspect=1,
     )
     grid.savefig(
-        args.output_prefix + "metrics_dependent_on_r1_match.svg",
-        bbox_inches="tight",
-        dpi=300,
+        args.output_prefix + "metrics_dependent_on_r1_match.svg", bbox_inches="tight", dpi=300,
     )
 
 
@@ -1316,9 +1308,7 @@ def get_stats_per_droplet(metrics, doublet_threshold=0.85, save_intermediate=Tru
         sp_ratio=metrics_droplet["human"] / metrics_droplet["total"],
     ).sort_values("total")
     metrics_droplet = metrics_droplet.assign(
-        doublet=(metrics_droplet["ratio"] < doublet_threshold)
-        .astype(int)
-        .replace(0, -1)
+        doublet=(metrics_droplet["ratio"] < doublet_threshold).astype(int).replace(0, -1)
     )
 
     # Assess species bias
@@ -1332,9 +1322,7 @@ def get_stats_per_droplet(metrics, doublet_threshold=0.85, save_intermediate=Tru
     metrics_droplet.loc[:, "human_norm"] = (
         metrics_droplet["human"] * r[int(args.expected_cell_number)]
     )
-    metrics_droplet.loc[:, "total_norm"] = metrics_droplet[["mouse", "human_norm"]].sum(
-        1
-    )
+    metrics_droplet.loc[:, "total_norm"] = metrics_droplet[["mouse", "human_norm"]].sum(1)
     metrics_droplet.loc[:, "max_norm"] = metrics_droplet[["mouse", "human_norm"]].max(1)
     metrics_droplet.loc[:, "ratio_norm"] = (
         metrics_droplet["max_norm"] / metrics_droplet["total_norm"]
@@ -1343,9 +1331,7 @@ def get_stats_per_droplet(metrics, doublet_threshold=0.85, save_intermediate=Tru
         metrics_droplet["human_norm"] / metrics_droplet["total_norm"]
     )
     metrics_droplet.loc[:, "doublet_norm"] = (
-        (metrics_droplet.loc[:, "ratio_norm"] < doublet_threshold)
-        .astype(int)
-        .replace(0, -1)
+        (metrics_droplet.loc[:, "ratio_norm"] < doublet_threshold).astype(int).replace(0, -1)
     )
 
     if save_intermediate:
@@ -1372,8 +1358,7 @@ def plot_well_stats(well_metrics, keys=["droplets", "umis"], tail=None, suffix="
         axis[i].set_xlabel("Well")
         axis[i].set_ylabel(metric.capitalize())
     fig.savefig(
-        args.output_prefix
-        + f"metrics_per_well.lineplot.{suffix}.svg".replace("..", "."),
+        args.output_prefix + f"metrics_per_well.lineplot.{suffix}.svg".replace("..", "."),
         dpi=300,
         bbox_inches="tight",
     )
@@ -1383,9 +1368,7 @@ def plot_well_stats(well_metrics, keys=["droplets", "umis"], tail=None, suffix="
         return
 
     cols = well_metrics.columns[well_metrics.columns.str.endswith("_content")]
-    fig, axis = plt.subplots(
-        n, len(cols), figsize=(len(cols) * 3, n * 3), tight_layout=True
-    )
+    fig, axis = plt.subplots(n, len(cols), figsize=(len(cols) * 3, n * 3), tight_layout=True)
     for j, col in enumerate(cols):
         for i, key in enumerate(keys):
             axis[i, j].scatter(
@@ -1395,8 +1378,7 @@ def plot_well_stats(well_metrics, keys=["droplets", "umis"], tail=None, suffix="
             axis[i, j].set_xlabel(col.replace("_", " ").upper())
             axis[i, j].set_ylabel(key.capitalize() + " per well")
     fig.savefig(
-        args.output_prefix
-        + f"metrics_per_well.sequence_content.{suffix}.svg".replace("..", "."),
+        args.output_prefix + f"metrics_per_well.sequence_content.{suffix}.svg".replace("..", "."),
         dpi=300,
         bbox_inches="tight",
     )
@@ -1423,8 +1405,7 @@ def plot_barcode_match_fraction(r1, r2, suffix=""):
         aspect=1,
     )
     grid.fig.savefig(
-        args.output_prefix
-        + f"barcode_matching.barplot.{suffix}.svg".replace("..", "."),
+        args.output_prefix + f"barcode_matching.barplot.{suffix}.svg".replace("..", "."),
         dpi=300,
         bbox_inches="tight",
     )
@@ -1460,11 +1441,7 @@ def plot_umi_match_fraction(umi, r1_match, r2_match, suffix=""):
 def plot_comparison_to_10x(c, d, suffix=""):
     # # Compare side by side in logster
     for attr, label, kwargs in [
-        (
-            "sp_ratio",
-            "coloured_by_ratio",
-            {"cmap": get_custom_cmap(), "vmin": 0, "vmax": 1},
-        ),
+        ("sp_ratio", "coloured_by_ratio", {"cmap": get_custom_cmap(), "vmin": 0, "vmax": 1},),
         # ('doublet', 'coloured_by_doublet', {"cmap": "tab20b", "vmin": -1, "vmax": 1}),
         # ('total', 'coloured_by_total', {"vmin": 100, "vmax": 10000}),
     ]:
@@ -1472,36 +1449,18 @@ def plot_comparison_to_10x(c, d, suffix=""):
         for ax in axis[:, 0]:
             ax.set_title("10X")
             ax.scatter(
-                d["mouse"],
-                d["human"],
-                c=d[attr],
-                s=1,
-                alpha=0.1,
-                rasterized=True,
-                **kwargs,
+                d["mouse"], d["human"], c=d[attr], s=1, alpha=0.1, rasterized=True, **kwargs,
             )
         for ax in axis[:, 1]:
             ax.set_title("scifi-RNA-seq")
             ax.scatter(
-                c["mouse"],
-                c["human"],
-                c=c[attr],
-                s=1,
-                alpha=0.1,
-                rasterized=True,
-                **kwargs,
+                c["mouse"], c["human"], c=c[attr], s=1, alpha=0.1, rasterized=True, **kwargs,
             )
         for ax in axis[:, 2]:
             ax.set_title("scifi-RNA-seq coloured as 10X only")
             c.loc[:, "10X_attr"] = d.loc[c.index.get_level_values(1), attr].values
             ax.scatter(
-                c["mouse"],
-                c["human"],
-                c=c["10X_attr"],
-                s=1,
-                alpha=0.05,
-                rasterized=True,
-                **kwargs,
+                c["mouse"], c["human"], c=c["10X_attr"], s=1, alpha=0.05, rasterized=True, **kwargs,
             )
         for ax in axis.flatten():
             ax.set_xlabel("Mouse (UMIs)")
@@ -1514,9 +1473,7 @@ def plot_comparison_to_10x(c, d, suffix=""):
             ax.loglog()
         fig.savefig(
             args.output_prefix
-            + f"species_mix.comparison_to_droplet.{label}.{suffix}.svg".replace(
-                "..", "."
-            ),
+            + f"species_mix.comparison_to_droplet.{label}.{suffix}.svg".replace("..", "."),
             dpi=300,
             bbox_inches="tight",
         )
@@ -1628,9 +1585,7 @@ def to_pickle(obj, name, array=True, only_array=False):
     print(f"# {time.asctime()} - Saving {name} to pickle.")
     if array:
         pickle.dump(
-            obj.values,
-            open(args.output_prefix + f"{name}.values.pickle", "wb"),
-            protocol=-1,
+            obj.values, open(args.output_prefix + f"{name}.values.pickle", "wb"), protocol=-1,
         )
     if only_array:
         return
@@ -1649,21 +1604,17 @@ def from_pickle(key, array=False):
 def cells_per_droplet_stats(cells_per_droplet):
     # Observe statistical properties
     def poisson(k, lamb):
-        from scipy.special import factorial
 
         return np.exp(-lamb) * (lamb ** k / factorial(k))
 
     def log_linear_poisson(k, lamb):
-        from scipy.special import factorial
 
         return np.log(np.exp(-lamb) * (lamb ** k / factorial(k)))
 
     cells_per_droplet_counts = cells_per_droplet.value_counts().sort_index()
 
     lamb, cov_matrix = scipy.optimize.curve_fit(
-        log_linear_poisson,
-        cells_per_droplet_counts.index.astype(int),
-        cells_per_droplet_counts,
+        log_linear_poisson, cells_per_droplet_counts.index.astype(int), cells_per_droplet_counts,
     )
 
     print(lamb)
@@ -1676,9 +1627,7 @@ def cells_per_droplet_stats(cells_per_droplet):
     y_hat = scipy.stats.poisson(lamb).pmf(x)
     y_hat *= cells_per_droplet.shape[0]
     for ax in axis:
-        ax.plot(
-            x + 0.5, y_hat
-        )  # the 0.5 is just to center on the middle of the histogram bins
+        ax.plot(x + 0.5, y_hat)  # the 0.5 is just to center on the middle of the histogram bins
 
     cpd = scipy.stats.poisson(lamb).rvs(cells_per_droplet.shape[0])
     for ax in axis:
@@ -1697,7 +1646,6 @@ def cells_per_droplet_stats(cells_per_droplet):
 
 
 def add_colorbar_to_axis(collection, label=None, position="right", size="5%", pad=0.05):
-    from mpl_toolkits.axes_grid1 import make_axes_locatable
 
     divider = make_axes_locatable(collection.axes)
     cax = divider.append_axes(position, size=size, pad=pad)
@@ -1724,8 +1672,6 @@ def get_custom_cmap(vmin=-1.0, vmax=1.0, inner=0.4):
 
 
 def parallel_groupby_apply(df, levels, function):
-    from joblib import Parallel, delayed
-    import multiprocessing
 
     g = df.groupby(levels)
     res = Parallel(n_jobs=multiprocessing.cpu_count())(

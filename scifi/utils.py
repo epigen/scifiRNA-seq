@@ -11,10 +11,19 @@ import pickle
 import numpy as np
 import pandas as pd
 import matplotlib
-
 import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from numpy.matlib import repmat
+
 import seaborn as sns
 import scipy
+from scipy.sparse import csr_matrix
+from scipy.special import factorial
+
+import multiprocessing
+from joblib import Parallel, delayed
+
+import anndata as an
 
 
 def ct():
@@ -27,12 +36,7 @@ def set_args(new_args):
     return args
 
 
-def write_gene_expression_matrix(
-    expr, output_file=None, file_format="h5ad", annotation=None
-):
-    from scipy.sparse import csr_matrix
-    import anndata as an
-
+def write_gene_expression_matrix(expr, output_file=None, file_format="h5ad", annotation=None):
     if file_format not in ["h5ad", "loom"]:
         raise ValueError("Output format must be one of 'h5ad' or 'loom'.")
 
@@ -42,21 +46,14 @@ def write_gene_expression_matrix(
         expr = expr.dropna(subset=["umi"])
 
     print(ct() + "Categorizing cells and genes.")
-    expr = expr.assign(
-        cell=expr["plate_well"] + "-" + expr[args.droplet_column]
-    )
-    expr["cell"] = (
-        expr["plate_well"] + "-" + expr[args.droplet_column]
-    ).astype("category")
+    expr = expr.assign(cell=expr["plate_well"] + "-" + expr[args.droplet_column])
+    expr["cell"] = (expr["plate_well"] + "-" + expr[args.droplet_column]).astype("category")
     expr["gene"] = expr["gene"].astype("category")
 
     print(ct() + "Creating sparse matrix.")
     sparse_matrix = csr_matrix(
         (expr["umi"].values, (expr["cell"].cat.codes, expr["gene"].cat.codes)),
-        shape=(
-            len(expr["cell"].cat.categories),
-            len(expr["gene"].cat.categories),
-        ),
+        shape=(len(expr["cell"].cat.categories), len(expr["gene"].cat.categories),),
         dtype=np.int,
     )
 
@@ -89,13 +86,7 @@ def load_metrics(files, **kwargs):
     pieces = list()
     for file in files:
         print(ct() + "Reading file {file}.")
-        d = pd.read_csv(
-            file,
-            error_bad_lines=False,
-            engine="c",
-            compression="gzip",
-            **kwargs,
-        )
+        d = pd.read_csv(file, error_bad_lines=False, engine="c", compression="gzip", **kwargs,)
         pieces.append(d)
         print(ct() + "Done with file {file}. {d.shape[0]} lines.")
 
@@ -116,14 +107,10 @@ def gather_stats_per_cell_as_droplet(
 
     # performance metrics
     # # UMI count per cell
-    umi_counts = df.groupby(cell_barcodes + ["gene", "pos"], sort=False)[
-        "umi"
-    ].nunique()
+    umi_counts = df.groupby(cell_barcodes + ["gene", "pos"], sort=False)["umi"].nunique()
     if save_intermediate:
         to_pickle(umi_counts, "umi_counts" + suffix)
-    umis_per_cell = (
-        umi_counts.groupby(cell_barcodes, sort=False).sum().sort_values()
-    )
+    umis_per_cell = umi_counts.groupby(cell_barcodes, sort=False).sum().sort_values()
     if save_intermediate:
         to_pickle(umis_per_cell, "umis_per_cell" + suffix)
 
@@ -138,9 +125,7 @@ def gather_stats_per_cell_as_droplet(
             .replace(False, "mouse")
         )
     )
-    species_counts = umi_counts2.groupby(cell_barcodes + ["species"])[
-        "umi"
-    ].sum()
+    species_counts = umi_counts2.groupby(cell_barcodes + ["species"])["umi"].sum()
 
     spc = species_counts.reset_index().pivot_table(
         index=cell_barcodes, columns="species", values="umi", fill_value=0
@@ -150,9 +135,7 @@ def gather_stats_per_cell_as_droplet(
     spc = spc.assign(
         ratio=spc["max"] / spc["total"], sp_ratio=spc["human"] / spc["total"]
     ).sort_values("total")
-    spc = spc.assign(
-        doublet=(spc["ratio"] < doublet_threshold).astype(int).replace(0, -1)
-    )
+    spc = spc.assign(doublet=(spc["ratio"] < doublet_threshold).astype(int).replace(0, -1))
     if save_intermediate:
         to_pickle(spc, "spc" + suffix)
 
@@ -174,21 +157,13 @@ def gather_stats_per_cell_as_droplet(
     r = pd.Series(r).sort_index()
 
     # Add normalized metrics to stats
-    metrics_r2.loc[:, "human_norm"] = (
-        metrics_r2["human"] * r[int(args.expected_cell_number)]
-    )
+    metrics_r2.loc[:, "human_norm"] = metrics_r2["human"] * r[int(args.expected_cell_number)]
     metrics_r2.loc[:, "total_norm"] = metrics_r2[["mouse", "human_norm"]].sum(1)
     metrics_r2.loc[:, "max_norm"] = metrics_r2[["mouse", "human_norm"]].max(1)
-    metrics_r2.loc[:, "ratio_norm"] = (
-        metrics_r2["max_norm"] / metrics_r2["total_norm"]
-    )
-    metrics_r2.loc[:, "sp_ratio_norm"] = (
-        metrics_r2["human_norm"] / metrics_r2["total_norm"]
-    )
+    metrics_r2.loc[:, "ratio_norm"] = metrics_r2["max_norm"] / metrics_r2["total_norm"]
+    metrics_r2.loc[:, "sp_ratio_norm"] = metrics_r2["human_norm"] / metrics_r2["total_norm"]
     metrics_r2.loc[:, "doublet_norm"] = (
-        (metrics_r2.loc[:, "ratio_norm"] < doublet_threshold)
-        .astype(int)
-        .replace(0, -1)
+        (metrics_r2.loc[:, "ratio_norm"] < doublet_threshold).astype(int).replace(0, -1)
     )
 
     if save_intermediate:
@@ -203,8 +178,7 @@ def gather_stats_per_cell_as_droplet(
     axis.set_ylabel("Ratio of mean UMIs per cell\nbetween mouse and human")
     axis.set_xscale("log")
     fig.savefig(
-        args.output_prefix
-        + f"species_bias.lineplot.{suffix}.svg".replace("..", "."),
+        args.output_prefix + f"species_bias.lineplot.{suffix}.svg".replace("..", "."),
         dpi=300,
         bbox_inches="tight",
     )
@@ -213,9 +187,7 @@ def gather_stats_per_cell_as_droplet(
     metrics2 = metrics_r2.tail(int(10 * args.expected_cell_number))
 
     for label in ["", ".log"]:
-        fig, axis = plt.subplots(
-            1, 2, figsize=(2 * 3, 1 * 3), tight_layout=True, squeeze=False
-        )
+        fig, axis = plt.subplots(1, 2, figsize=(2 * 3, 1 * 3), tight_layout=True, squeeze=False)
         kwargs = {
             "s": 0.1,
             "alpha": 0.2,
@@ -223,10 +195,7 @@ def gather_stats_per_cell_as_droplet(
             "cmap": get_custom_cmap(),
         }
         axis[0, 0].scatter(
-            metrics2["mouse"],
-            metrics2["human"],
-            c=metrics2["sp_ratio"],
-            **kwargs,
+            metrics2["mouse"], metrics2["human"], c=metrics2["sp_ratio"], **kwargs,
         )
         # axis[0, 1].scatter(metrics2['mouse'], metrics2['human'], c=metrics2['sp_ratio_norm'], **kwargs)
         v = metrics2[["mouse", "human"]].quantile(0.999).max()
@@ -261,12 +230,7 @@ def gather_stats_per_cell_as_droplet(
 
 
 def plot_metrics_lineplot(
-    metrics,
-    keys=["read", "umi", "gene"],
-    tail=None,
-    suffix="",
-    by_group=None,
-    always_legend=False,
+    metrics, keys=["read", "umi", "gene"], tail=None, suffix="", by_group=None, always_legend=False,
 ):
     def min_max(x):
         return (x - x.min()) / (x.max() - x.min())
@@ -288,9 +252,7 @@ def plot_metrics_lineplot(
     styles = ["solid", "dashed", "dashdot", "dotted"]
     num_styles = len(styles)
 
-    fig, axis = plt.subplots(
-        n, 2, figsize=(2 * 6, n * 3)
-    )  # , tight_layout=True)
+    fig, axis = plt.subplots(n, 2, figsize=(2 * 6, n * 3))  # , tight_layout=True)
     for i, metric in enumerate(keys):
         for j, group in enumerate(groups):
             d = metrics.loc[metrics[by_group] == group, metric].sort_values()
@@ -312,27 +274,19 @@ def plot_metrics_lineplot(
             axis[i, 0].scatter(rank.iloc[inf], d.iloc[inf], s=20, color="black")
             axis[i, 0].axvline(rank.iloc[inf], linestyle="--", color="black")
             axis[i, 0].text(rank.iloc[inf], d.iloc[inf], s=s)
-        axis[i, 0].axvline(
-            args.expected_cell_number, linestyle="--", color="grey"
-        )
+        axis[i, 0].axvline(args.expected_cell_number, linestyle="--", color="grey")
         for l, ax in enumerate(axis[i, :]):
             ax.loglog()
             ax.set_xlabel("Barcodes")
             ax.set_ylabel(metric.capitalize() + "s")
             # add legend only to one panel if requested
-            if (by_group != "dummy") and (
-                always_legend or ((i == 0) and (l == 1))
-            ):
+            if (by_group != "dummy") and (always_legend or ((i == 0) and (l == 1))):
                 ax.legend(
-                    bbox_to_anchor=(1.05, 1),
-                    loc="upper left",
-                    borderaxespad=0.0,
-                    ncol=1,
+                    bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0.0, ncol=1,
                 )
                 # ax.legend_.set_in_layout(False)
     fig.savefig(
-        args.output_prefix
-        + f"metrics_per_cell.lineplot.{suffix}.svg".replace("..", "."),
+        args.output_prefix + f"metrics_per_cell.lineplot.{suffix}.svg".replace("..", "."),
         dpi=300,
         bbox_inches="tight",
     )
@@ -357,12 +311,7 @@ def plot_metrics_distplot(
     colors = sns.color_palette("husl", n_colors=len(groups))
 
     fig, axis = plt.subplots(
-        1,
-        n,
-        figsize=(n * 3, 1 * 3),
-        tight_layout=True,
-        sharex="col",
-        squeeze=True,
+        1, n, figsize=(n * 3, 1 * 3), tight_layout=True, sharex="col", squeeze=True,
     )
     for i, metric in enumerate(keys):
         axis[i].set_yscale("log")
@@ -379,8 +328,7 @@ def plot_metrics_distplot(
         if by_group != "dummy":
             axis[i].legend()
     fig.savefig(
-        args.output_prefix
-        + f"metrics_per_cell.distplot.{suffix}.svg".replace("..", "."),
+        args.output_prefix + f"metrics_per_cell.distplot.{suffix}.svg".replace("..", "."),
         dpi=300,
         bbox_inches="tight",
     )
@@ -405,9 +353,7 @@ def plot_efficiency(
     if isinstance(log_scale, bool):
         log_scale = [log_scale for _ in keys]
     else:
-        assert len(log_scale) == len(
-            keys
-        ), "'log_scale' must be bool or same length as 'keys'!"
+        assert len(log_scale) == len(keys), "'log_scale' must be bool or same length as 'keys'!"
 
     if colour_by is None:
         colour_by = "efficiency"
@@ -442,12 +388,7 @@ def plot_efficiency(
 
             # Plot cells
             col = axis[i, j].scatter(
-                d["read"],
-                d[metric],
-                c=d[colour_by],
-                rasterized=True,
-                alpha=0.2,
-                s=2,
+                d["read"], d[metric], c=d[colour_by], rasterized=True, alpha=0.2, s=2,
             )
             axis[i, j].set_xscale("log")
             add_colorbar_to_axis(col, label=colour_by)
@@ -456,9 +397,7 @@ def plot_efficiency(
             if log_scale[i]:
                 # # fit curve
                 try:
-                    (m, b), pcov = scipy.optimize.curve_fit(
-                        lin_func, d["read"], d[metric]
-                    )
+                    (m, b), pcov = scipy.optimize.curve_fit(lin_func, d["read"], d[metric])
                     # lm = LinearRegression().fit(d['read'].values.reshape(-1, 1), d[metric])
                     # assert np.allclose(m, lm.coef_)
                     # assert np.allclose(b, lm.intercept_)
@@ -483,8 +422,7 @@ def plot_efficiency(
                 axis[i, j].text(
                     1e4,
                     y,
-                    s=f"{metric.capitalize()}s recovered\n"
-                    f"with 10.000\nreads:\n{y:.2f}",
+                    s=f"{metric.capitalize()}s recovered\n" f"with 10.000\nreads:\n{y:.2f}",
                     ha="left",
                 )
                 # Plot X == Y
@@ -494,19 +432,13 @@ def plot_efficiency(
                 ymax += ymax * 0.1
                 x = np.linspace(0, ymax, num=2)
                 y = lin_func(x, 1, 0)
-                axis[i, j].plot(
-                    x, y, linestyle="--", color="black", linewidth=0.5
-                )
+                axis[i, j].plot(x, y, linestyle="--", color="black", linewidth=0.5)
 
                 # Plot lines at relevant metrics
                 for h in [100, 250, 500, 1000, args.expected_cell_number]:
-                    axis[i, j].axhline(
-                        h, linestyle="--", color="black", linewidth=0.5
-                    )
+                    axis[i, j].axhline(h, linestyle="--", color="black", linewidth=0.5)
             for v in [10000, 100000]:
-                axis[i, j].axvline(
-                    v, linestyle="--", color="black", linewidth=0.5
-                )
+                axis[i, j].axvline(v, linestyle="--", color="black", linewidth=0.5)
     fig.savefig(
         args.output_prefix + f"performance_per_cell.scatter."
         "coloured_by_{colour_by}.{suffix}.svg".replace("..", "."),
@@ -516,13 +448,7 @@ def plot_efficiency(
 
 
 def plot_species_mixing(
-    metrics,
-    norm=False,
-    tail=None,
-    suffix="",
-    cmaps=None,
-    zoom_in_area=3000,
-    axislims=10000,
+    metrics, norm=False, tail=None, suffix="", cmaps=None, zoom_in_area=3000, axislims=10000,
 ):
     print(ct() + "Plotting species mixtures.")
     if tail is None:
@@ -534,22 +460,14 @@ def plot_species_mixing(
         suffix += "_norm"
 
     if cmaps is None:
-        cmaps = [
-            get_custom_cmap()
-        ]  # , plt.get_cmap("coolwarm"), plt.get_cmap("Spectral_r")]
+        cmaps = [get_custom_cmap()]  # , plt.get_cmap("coolwarm"), plt.get_cmap("Spectral_r")]
     for attr, label, kwargs in [
-        (
-            "sp_ratio_norm" if norm else "sp_ratio",
-            "coloured_by_ratio",
-            {"vmin": 0, "vmax": 1},
-        ),
+        ("sp_ratio_norm" if norm else "sp_ratio", "coloured_by_ratio", {"vmin": 0, "vmax": 1},),
         # ('doublet_norm' if norm else 'doublet', 'coloured_by_doublet', {"vmin": -1, "vmax": 1}),
     ]:
         for cmap in cmaps:
             n_panels = 4
-            fig, axis = plt.subplots(
-                1, n_panels, figsize=(n_panels * 4, 4), tight_layout=True
-            )
+            fig, axis = plt.subplots(1, n_panels, figsize=(n_panels * 4, 4), tight_layout=True)
             for ax in axis[:3]:
                 col = ax.scatter(
                     metrics["mouse"],
@@ -585,9 +503,7 @@ def plot_species_mixing(
             axis[3].set_ylabel("Human (UMIs)")
             fig.savefig(
                 args.output_prefix
-                + f"species_mix.{suffix}.{label}.{cmap.name}.svg".replace(
-                    "..", "."
-                ),
+                + f"species_mix.{suffix}.{label}.{cmap.name}.svg".replace("..", "."),
                 dpi=300,
                 bbox_inches="tight",
             )
@@ -603,10 +519,7 @@ def gather_stats_per_well(metrics, seq_content=False, save_intermediate=True):
 
     # # # see how many droplets per well
     droplets_per_well = (
-        metrics.reset_index()
-        .groupby(args.well_column)["r2"]
-        .nunique()
-        .sort_values()
+        metrics.reset_index().groupby(args.well_column)["r2"].nunique().sort_values()
     )
     droplets_per_well.name = "droplets"
     if save_intermediate:
@@ -648,15 +561,11 @@ def get_exact_matches(
         if whitelists[i] is None:
             continue
         if isinstance(metrics.index, pd.MultiIndex):
-            match = metrics.index.get_level_values(barcode).isin(
-                whitelists[i].tolist()
-            )
+            match = metrics.index.get_level_values(barcode).isin(whitelists[i].tolist())
         else:
             match = metrics[barcode].isin(whitelists[i].tolist())
 
-        print(
-            f"{barcode} barcode matching rate: {match.sum() / match.shape[0]}"
-        )
+        print(f"{barcode} barcode matching rate: {match.sum() / match.shape[0]}")
         print(
             f"{barcode} read matching rate: {metrics.loc[match, 'read'].sum() / metrics['read'].sum()}"
         )
@@ -666,9 +575,7 @@ def get_exact_matches(
 
         t_match = match[-expected_cell_number:]
         tmetrics = metrics.tail(expected_cell_number)
-        print(
-            f"{barcode} top barcode matching rate: {t_match.sum() / t_match.shape[0]}"
-        )
+        print(f"{barcode} top barcode matching rate: {t_match.sum() / t_match.shape[0]}")
         print(
             f"{barcode} top umi matching rate: {tmetrics.loc[t_match, 'read'].sum() / tmetrics['read'].sum()}"
         )
@@ -676,12 +583,8 @@ def get_exact_matches(
             f"{barcode} top umi matching rate: {tmetrics.loc[t_match, 'umi'].sum() / tmetrics['umi'].sum()}"
         )
 
-        print(
-            f"{barcode} fraction of top reads: {tmetrics['read'].sum() / metrics['read'].sum()}"
-        )
-        print(
-            f"{barcode} fraction of top umis: {tmetrics['umi'].sum() / metrics['umi'].sum()}"
-        )
+        print(f"{barcode} fraction of top reads: {tmetrics['read'].sum() / metrics['read'].sum()}")
+        print(f"{barcode} fraction of top umis: {tmetrics['umi'].sum() / metrics['umi'].sum()}")
 
         if save_intermediate:
             to_pickle(match, barcode + "_match" + suffix, array=False)
@@ -702,9 +605,7 @@ def get_exact_matches(
 
     if plot:
         # Observe metrics of experiment dependent on barcode matching
-        metrics = metrics.assign(
-            **{k + "_match": v for k, v in matches.items()}
-        )
+        metrics = metrics.assign(**{k + "_match": v for k, v in matches.items()})
         for b in barcodes:
             m = metrics.groupby(f"{b}_match").mean()
             mm = m.reset_index().melt(id_vars=[f"{b}_match"])
@@ -746,9 +647,7 @@ def get_exact_matches_droplet(
     return metrics_filtered
 
 
-def get_stats_per_droplet(
-    metrics, doublet_threshold=0.85, save_intermediate=True
-):
+def get_stats_per_droplet(metrics, doublet_threshold=0.85, save_intermediate=True):
     metrics_droplet = metrics.groupby("r2")[
         "read", "umi", "gene", "human", "mouse", "total", "max"
     ].sum()
@@ -758,9 +657,7 @@ def get_stats_per_droplet(
         sp_ratio=metrics_droplet["human"] / metrics_droplet["total"],
     ).sort_values("total")
     metrics_droplet = metrics_droplet.assign(
-        doublet=(metrics_droplet["ratio"] < doublet_threshold)
-        .astype(int)
-        .replace(0, -1)
+        doublet=(metrics_droplet["ratio"] < doublet_threshold).astype(int).replace(0, -1)
     )
 
     # Assess species bias
@@ -774,12 +671,8 @@ def get_stats_per_droplet(
     metrics_droplet.loc[:, "human_norm"] = (
         metrics_droplet["human"] * r[int(args.expected_cell_number)]
     )
-    metrics_droplet.loc[:, "total_norm"] = metrics_droplet[
-        ["mouse", "human_norm"]
-    ].sum(1)
-    metrics_droplet.loc[:, "max_norm"] = metrics_droplet[
-        ["mouse", "human_norm"]
-    ].max(1)
+    metrics_droplet.loc[:, "total_norm"] = metrics_droplet[["mouse", "human_norm"]].sum(1)
+    metrics_droplet.loc[:, "max_norm"] = metrics_droplet[["mouse", "human_norm"]].max(1)
     metrics_droplet.loc[:, "ratio_norm"] = (
         metrics_droplet["max_norm"] / metrics_droplet["total_norm"]
     )
@@ -787,9 +680,7 @@ def get_stats_per_droplet(
         metrics_droplet["human_norm"] / metrics_droplet["total_norm"]
     )
     metrics_droplet.loc[:, "doublet_norm"] = (
-        (metrics_droplet.loc[:, "ratio_norm"] < doublet_threshold)
-        .astype(int)
-        .replace(0, -1)
+        (metrics_droplet.loc[:, "ratio_norm"] < doublet_threshold).astype(int).replace(0, -1)
     )
 
     if save_intermediate:
@@ -798,9 +689,7 @@ def get_stats_per_droplet(
     return metrics_droplet
 
 
-def plot_well_stats(
-    well_metrics, keys=["droplets", "umis"], tail=None, suffix=""
-):
+def plot_well_stats(well_metrics, keys=["droplets", "umis"], tail=None, suffix=""):
     print(ct() + "Plotting metrics per combinatorial indexing well.")
     if tail is not None:
         well_metrics = well_metrics.tail(tail)
@@ -817,8 +706,7 @@ def plot_well_stats(
         axis[i].set_xlabel("Well")
         axis[i].set_ylabel(metric.capitalize())
     fig.savefig(
-        args.output_prefix
-        + f"metrics_per_well.lineplot.{suffix}.svg".replace("..", "."),
+        args.output_prefix + f"metrics_per_well.lineplot.{suffix}.svg".replace("..", "."),
         dpi=300,
         bbox_inches="tight",
     )
@@ -828,24 +716,17 @@ def plot_well_stats(
         return
 
     cols = well_metrics.columns[well_metrics.columns.str.endswith("_content")]
-    fig, axis = plt.subplots(
-        n, len(cols), figsize=(len(cols) * 3, n * 3), tight_layout=True
-    )
+    fig, axis = plt.subplots(n, len(cols), figsize=(len(cols) * 3, n * 3), tight_layout=True)
     for j, col in enumerate(cols):
         for i, key in enumerate(keys):
             axis[i, j].scatter(
-                well_metrics[col],
-                well_metrics[key],
-                rasterized=True,
-                s=2,
-                alpha=0.5,
+                well_metrics[col], well_metrics[key], rasterized=True, s=2, alpha=0.5,
             )
             axis[i, j].set_xlim((-0.1, 1.1))
             axis[i, j].set_xlabel(col.replace("_", " ").upper())
             axis[i, j].set_ylabel(key.capitalize() + " per well")
     fig.savefig(
-        args.output_prefix
-        + f"metrics_per_well.sequence_content.{suffix}.svg".replace("..", "."),
+        args.output_prefix + f"metrics_per_well.sequence_content.{suffix}.svg".replace("..", "."),
         dpi=300,
         bbox_inches="tight",
     )
@@ -858,17 +739,12 @@ def plot_barcode_match_fraction(matches, suffix=""):
     print(ct() + "Plotting fraction of correct barcodes.")
 
     d = pd.DataFrame(
-        [
-            [sum(x) for x in matches.values()],
-            [x.shape[0] for x in matches.values()],
-        ],
+        [[sum(x) for x in matches.values()], [x.shape[0] for x in matches.values()],],
         index=["correct", "total"],
         columns=matches.keys(),
     )
 
-    d.loc["correct", "both"] = (
-        np.array([x for x in matches.values()]).all(axis=0).sum()
-    )
+    d.loc["correct", "both"] = np.array([x for x in matches.values()]).all(axis=0).sum()
     d.loc["total", "both"] = list(matches.values())[0].shape[0]
     d.loc["fraction of exact match", :] = d.loc["correct"] / d.loc["total"]
 
@@ -883,8 +759,7 @@ def plot_barcode_match_fraction(matches, suffix=""):
         aspect=1,
     )
     grid.fig.savefig(
-        args.output_prefix
-        + f"barcode_matching.barplot.{suffix}.svg".replace("..", "."),
+        args.output_prefix + f"barcode_matching.barplot.{suffix}.svg".replace("..", "."),
         dpi=300,
         bbox_inches="tight",
     )
@@ -894,10 +769,7 @@ def plot_umi_match_fraction(umi, matches, suffix=""):
     print(ct() + "Plotting fraction of correct barcodes.")
 
     d = pd.DataFrame(
-        [
-            [sum(umi.loc[x]) for x in matches.values()],
-            [umi.sum() for x in matches.values()],
-        ],
+        [[sum(umi.loc[x]) for x in matches.values()], [umi.sum() for x in matches.values()],],
         index=["correct", "total"],
         columns=matches.keys(),
     )
@@ -914,8 +786,7 @@ def plot_umi_match_fraction(umi, matches, suffix=""):
         aspect=1,
     )
     grid.fig.savefig(
-        args.output_prefix
-        + f"umi_matching.barplot.{suffix}.svg".replace("..", "."),
+        args.output_prefix + f"umi_matching.barplot.{suffix}.svg".replace("..", "."),
         dpi=300,
         bbox_inches="tight",
     )
@@ -958,23 +829,17 @@ def to_pickle(obj, name, array=True, only_array=False):
     print(ct() + f"Saving {name} to pickle.")
     if array:
         pickle.dump(
-            obj.values,
-            open(args.output_prefix + f"{name}.values.pickle", "wb"),
-            protocol=-1,
+            obj.values, open(args.output_prefix + f"{name}.values.pickle", "wb"), protocol=-1,
         )
     if only_array:
         return
-    pickle.dump(
-        obj, open(args.output_prefix + f"{name}.pickle", "wb"), protocol=-1
-    )
+    pickle.dump(obj, open(args.output_prefix + f"{name}.pickle", "wb"), protocol=-1)
 
 
 def from_pickle(key, array=False):
     print(ct() + f"Loading {key} from pickle.")
     if array:
-        return pickle.load(
-            open(args.output_prefix + f"{key}.values.pickle", "rb")
-        )
+        return pickle.load(open(args.output_prefix + f"{key}.values.pickle", "rb"))
     return pickle.load(open(args.output_prefix + f"{key}.pickle", "rb"))
 
     # df = pickle.load(open(args.output_prefix + "all.pickle", 'rb'))
@@ -983,43 +848,31 @@ def from_pickle(key, array=False):
 def cells_per_droplet_stats(cells_per_droplet, suffix=""):
     # Observe statistical properties
     def poisson(k, lamb):
-        from scipy.special import factorial
-
         return np.exp(-lamb) * (lamb ** k / factorial(k))
 
     def log_linear_poisson(k, lamb):
-        from scipy.special import factorial
-
         return np.log(np.exp(-lamb) * (lamb ** k / factorial(k)))
 
     cells_per_droplet_counts = cells_per_droplet.value_counts().sort_index()
 
     lamb, cov_matrix = scipy.optimize.curve_fit(
-        log_linear_poisson,
-        cells_per_droplet_counts.index.astype(int),
-        cells_per_droplet_counts,
+        log_linear_poisson, cells_per_droplet_counts.index.astype(int), cells_per_droplet_counts,
     )
 
     fig, axis = plt.subplots(1, 2, figsize=(3 * 2, 3), tight_layout=True)
     # bins = cells_per_droplet_counts.shape[0]
     bins = None
     for ax in axis:
-        sns.distplot(
-            cells_per_droplet, bins=bins, kde=False, ax=ax, label="Real"
-        )
+        sns.distplot(cells_per_droplet, bins=bins, kde=False, ax=ax, label="Real")
     x = np.arange(0, cells_per_droplet_counts.index.max())
     y_hat = scipy.stats.poisson(lamb).pmf(x)
     y_hat *= cells_per_droplet.shape[0]
     for ax in axis:
-        ax.plot(
-            x + 0.5, y_hat
-        )  # the 0.5 is just to center on the middle of the histogram bins
+        ax.plot(x + 0.5, y_hat)  # the 0.5 is just to center on the middle of the histogram bins
 
     cpd = scipy.stats.poisson(lamb).rvs(cells_per_droplet.shape[0])
     for ax in axis:
-        sns.distplot(
-            cpd, bins=bins, kde=False, ax=ax, norm_hist=False, label="Poisson"
-        )
+        sns.distplot(cpd, bins=bins, kde=False, ax=ax, norm_hist=False, label="Poisson")
     for ax in axis:
         ax.set_xlabel("Cells")
         ax.set_ylabel("Droplets")
@@ -1029,19 +882,13 @@ def cells_per_droplet_stats(cells_per_droplet, suffix=""):
     axis[1].set_ylim(bottom=0.1)
     fig.savefig(
         args.output_prefix
-        + f"cells_per_droplet.poissonian_properties.{suffix}.svg".replace(
-            "..", "."
-        ),
+        + f"cells_per_droplet.poissonian_properties.{suffix}.svg".replace("..", "."),
         dpi=300,
         bbox_inches="tight",
     )
 
 
-def add_colorbar_to_axis(
-    collection, label=None, position="right", size="5%", pad=0.05
-):
-    from mpl_toolkits.axes_grid1 import make_axes_locatable
-
+def add_colorbar_to_axis(collection, label=None, position="right", size="5%", pad=0.05):
     divider = make_axes_locatable(collection.axes)
     cax = divider.append_axes(position, size=size, pad=pad)
     cbar = plt.colorbar(mappable=collection, cax=cax, label=label, alpha=1)
@@ -1067,9 +914,6 @@ def get_custom_cmap(vmin=-1.0, vmax=1.0, inner=0.4):
 
 
 def parallel_groupby_apply(df, levels, function):
-    from joblib import Parallel, delayed
-    import multiprocessing
-
     g = df.groupby(levels)
     res = Parallel(n_jobs=multiprocessing.cpu_count())(
         delayed(function)(group) for name, group in g
@@ -1079,15 +923,11 @@ def parallel_groupby_apply(df, levels, function):
 
 def inflection_point(curve):
     """Return the index of the inflection point of a curve"""
-    from numpy.matlib import repmat
-
     n_points = len(curve)
     all_coord = np.vstack((range(n_points), curve)).T
     line_vec = all_coord[-1] - all_coord[0]
     line_vec_norm = line_vec / np.sqrt(np.sum(line_vec ** 2))
     vec_from_first = all_coord - all_coord[0]
-    scalar_product = np.sum(
-        vec_from_first * repmat(line_vec_norm, n_points, 1), axis=1
-    )
+    scalar_product = np.sum(vec_from_first * repmat(line_vec_norm, n_points, 1), axis=1)
     vec_to_line = vec_from_first - np.outer(scalar_product, line_vec_norm)
     return np.argmax(np.sqrt(np.sum(vec_to_line ** 2, axis=1)))

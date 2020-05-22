@@ -10,7 +10,7 @@ import subprocess
 
 
 def job_shebang() -> str:
-    return '#!/bin/env bash\n\ndate\n'
+    return "#!/bin/env bash\n\ndate\n"
 
 
 def print_parameters_during_job(job_params) -> str:
@@ -18,11 +18,11 @@ def print_parameters_during_job(job_params) -> str:
 
 
 def slurm_echo_array_task_id() -> str:
-    return 'echo SLURM_ARRAY_TASK_ID = $SLURM_ARRAY_TASK_ID\n'
+    return "echo SLURM_ARRAY_TASK_ID = $SLURM_ARRAY_TASK_ID\n"
 
 
 def job_end() -> str:
-    return '\n\ndate\n\n'
+    return "\n\ndate\n\n"
 
 
 def write_job_to_file(job, job_file) -> None:
@@ -37,7 +37,9 @@ def submit_job(job_file, params, array=None, cmd="sbatch") -> None:
     cmd = """{cmd} -J {job_name} \\
     -o {log_file} --time {time} \\
     -c {cpus} --mem {mem} -p {queue} \\
-    {array}{job_file}""".format(array="" if array is not None else "", **params)
+    {array}{job_file}""".format(
+        array="" if array is not None else "", **params
+    )
 
     subprocess.Popen(cmd.split(" "))
 

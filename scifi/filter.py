@@ -12,32 +12,40 @@ import argparse
 import pandas as pd
 from scifi import _LOGGER
 from scifi.job_control import (
-    job_shebang, print_parameters_during_job,
+    job_shebang,
+    print_parameters_during_job,
     slurm_echo_array_task_id,
-    job_end, write_job_to_file, submit_job)
+    job_end,
+    write_job_to_file,
+    submit_job,
+)
 
 
 def filter_command(
-        args: argparse.Namespace, config: dict,
-        sample_name: str, sample_out_dir: str,
-        r1_annotation: pd.DataFrame, r1_annotation_file: str,
-        r1_attributes: list,
-        species_mixture: bool = False, expected_cell_number: int = 200000,
-        correct_r2_barcodes: bool = False, correct_r2_barcodes_file: str = None,
-        dry_run: bool = False) -> int:
+    args: argparse.Namespace,
+    config: dict,
+    sample_name: str,
+    sample_out_dir: str,
+    r1_annotation: pd.DataFrame,
+    r1_annotation_file: str,
+    r1_attributes: list,
+    species_mixture: bool = False,
+    expected_cell_number: int = 200000,
+    correct_r2_barcodes: bool = False,
+    correct_r2_barcodes_file: str = None,
+    dry_run: bool = False,
+) -> int:
     _LOGGER.debug(f"Running filter command for sample '{sample_name}'")
-    filter_params = dict(
-        cpus=1,
-        mem=8000,
-        queue="shortq",
-        time="01:00:00")
+    filter_params = dict(cpus=1, mem=8000, queue="shortq", time="01:00:00")
     if correct_r2_barcodes and correct_r2_barcodes_file is None:
-        correct_r2_barcodes_file = os.path.join(sample_out_dir, sample_name + ".fixed_barcodes.mapping.tsv")
+        correct_r2_barcodes_file = os.path.join(
+            sample_out_dir, sample_name + ".fixed_barcodes.mapping.tsv"
+        )
 
     r1_names = list()
     r1_dirs = list()
     for r1_name, r1 in r1_annotation.iterrows():
-        r1['sample_name'] = r1.name
+        r1["sample_name"] = r1.name
         out_dir = os.path.join(args.root_output_dir, sample_name, r1_name)
         out_prefix = os.path.join(out_dir, r1_name) + ".ALL"
         output_suffix = "metrics" if not args.correct_r2_barcodes else "metrics_corrected"
@@ -51,7 +59,9 @@ def filter_command(
 
     if (not r1_names) or (not r1_dirs):
         _LOGGER.debug("Either 'r1_names' or 'r1_dirs' is an empty list.")
-        _LOGGER.error("Nothing to process! Output files already found and 'overwrite' option is off!")
+        _LOGGER.error(
+            "Nothing to process! Output files already found and 'overwrite' option is off!"
+        )
         return 1
 
     if not args.arrayed:
@@ -60,34 +70,38 @@ def filter_command(
             job = os.path.join(sample_out_dir, job_name + ".sh")
             log = os.path.join(sample_out_dir, job_name + ".log")
             out_prefix = os.path.join(sample_dir, r1_name) + ".ALL"
-            params = dict(
-                filter_params,
-                job_name=job_name,
-                job_file=job,
-                log_file=log)
+            params = dict(filter_params, job_name=job_name, job_file=job, log_file=log)
 
             cmd = job_shebang()
             cmd += print_parameters_during_job(params)
             cmd += filter_cmd(
-                r1_annotation_file, r1_attributes,
-                prefix=out_prefix, sample_name=r1_name,
+                r1_annotation_file,
+                r1_attributes,
+                prefix=out_prefix,
+                sample_name=r1_name,
                 exon=False,
-                min_umis=config['min_umi_output'],
+                min_umis=config["min_umi_output"],
                 expected_cell_number=expected_cell_number,
-                cell_barcodes="r2", species_mixture=species_mixture,
+                cell_barcodes="r2",
+                species_mixture=species_mixture,
                 correct_r2_barcodes=correct_r2_barcodes,
                 correct_r2_barcodes_file=correct_r2_barcodes_file,
-                overwrite=args.overwrite)
+                overwrite=args.overwrite,
+            )
             cmd += filter_cmd(
-                r1_annotation_file, r1_attributes,
-                prefix=out_prefix, sample_name=r1_name,
+                r1_annotation_file,
+                r1_attributes,
+                prefix=out_prefix,
+                sample_name=r1_name,
                 exon=True,
-                min_umis=config['min_umi_output'],
+                min_umis=config["min_umi_output"],
                 expected_cell_number=expected_cell_number,
-                cell_barcodes="r2", species_mixture=species_mixture,
+                cell_barcodes="r2",
+                species_mixture=species_mixture,
                 correct_r2_barcodes=correct_r2_barcodes,
                 correct_r2_barcodes_file=correct_r2_barcodes_file,
-                overwrite=args.overwrite)
+                overwrite=args.overwrite,
+            )
             cmd += job_end()
             write_job_to_file(cmd, job)
             if not dry_run:
@@ -95,8 +109,8 @@ def filter_command(
     else:
         # Write prefix and BAM files to array file
         array_file = os.path.join(
-            args.root_output_dir, sample_name,
-            f"scifi_pipeline.{sample_name}.filter.array_file.txt")
+            args.root_output_dir, sample_name, f"scifi_pipeline.{sample_name}.filter.array_file.txt"
+        )
         write_array_params(zip(r1_names, r1_dirs), array_file)
 
         # Now submit job array in chunks of size ``array.size``
@@ -105,37 +119,40 @@ def filter_command(
             job_name = f"scifi_pipeline.{sample_name}.filter.{array}"
             job = os.path.join(sample_out_dir, job_name + ".sh")
             log = os.path.join(sample_out_dir, job_name + ".%a.log")
-            params = dict(
-                filter_params,
-                job_name=job_name,
-                job_file=job,
-                log_file=log,
-                array=array)
+            params = dict(filter_params, job_name=job_name, job_file=job, log_file=log, array=array)
 
             cmd = job_shebang()
             cmd += slurm_echo_array_task_id()
             cmd += get_array_params_from_array_list(array_file)
             cmd += print_parameters_during_job(params)
             cmd += filter_cmd(
-                r1_annotation_file, r1_attributes,
-                prefix=None, sample_name=None,
+                r1_annotation_file,
+                r1_attributes,
+                prefix=None,
+                sample_name=None,
                 exon=False,
-                min_umis=config['min_umi_output'],
+                min_umis=config["min_umi_output"],
                 expected_cell_number=expected_cell_number,
-                cell_barcodes="r2", species_mixture=species_mixture,
+                cell_barcodes="r2",
+                species_mixture=species_mixture,
                 correct_r2_barcodes=correct_r2_barcodes,
                 correct_r2_barcodes_file=correct_r2_barcodes_file,
-                overwrite=args.overwrite)
+                overwrite=args.overwrite,
+            )
             cmd += filter_cmd(
-                r1_annotation_file, r1_attributes,
-                prefix=None, sample_name=None,
+                r1_annotation_file,
+                r1_attributes,
+                prefix=None,
+                sample_name=None,
                 exon=True,
-                min_umis=config['min_umi_output'],
+                min_umis=config["min_umi_output"],
                 expected_cell_number=expected_cell_number,
-                cell_barcodes="r2", species_mixture=species_mixture,
+                cell_barcodes="r2",
+                species_mixture=species_mixture,
                 correct_r2_barcodes=correct_r2_barcodes,
                 correct_r2_barcodes_file=correct_r2_barcodes_file,
-                overwrite=args.overwrite)
+                overwrite=args.overwrite,
+            )
             cmd += job_end()
             write_job_to_file(cmd, job)
             if not dry_run:
@@ -156,19 +173,25 @@ def get_array_params_from_array_list(array_file):
         "readarray -t ARR < $ARRAY_FILE" + "\n"
         'IFS=" " read -r -a F <<< ${ARR[$SLURM_ARRAY_TASK_ID]}' + "\n"
         "SAMPLE_NAME=${F[0]}" + "\n"
-        "SAMPLE_DIR=${F[1]}" + "\n")
+        "SAMPLE_DIR=${F[1]}" + "\n"
+    )
     return txt
 
 
 def filter_cmd(
-        r1_annotation,
-        r1_attributes: list,
-        prefix=None, sample_name=None,
-        exon=False,
-        min_umis=3, expected_cell_number=200000,
-        cell_barcodes="r2", species_mixture=False,
-        correct_r2_barcodes=False, correct_r2_barcodes_file=None,
-        overwrite=False):
+    r1_annotation,
+    r1_attributes: list,
+    prefix=None,
+    sample_name=None,
+    exon=False,
+    min_umis=3,
+    expected_cell_number=200000,
+    cell_barcodes="r2",
+    species_mixture=False,
+    correct_r2_barcodes=False,
+    correct_r2_barcodes_file=None,
+    overwrite=False,
+):
     """
     """
     additional_args = ""

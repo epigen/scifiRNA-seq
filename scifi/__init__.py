@@ -12,10 +12,11 @@ try:
     from scifi._version import __version__
 except ImportError:
     from setuptools_scm import get_version as _get_version
-    __version__ = _get_version(root='..', relative_to=__file__)
+
+    __version__ = _get_version(root="..", relative_to=__file__)
 
 
-def setup_logger(level="DEBUG", logfile=None):
+def setup_logger(level="INFO", logfile=None):
     """
     Set up a logger for the library.
 
@@ -67,8 +68,7 @@ def setup_logger(level="DEBUG", logfile=None):
     _LOGGER.addHandler(ch)
 
     _LOGGER.debug(
-        "This is scifi (https://github.com/epigen/scifiRNA-seq), version: {}"
-        .format(__version__)
+        "This is scifi (https://github.com/epigen/scifiRNA-seq), version: {}".format(__version__)
     )
     return _LOGGER
 
@@ -103,26 +103,19 @@ def setup_config(custom_yaml_config=None):
     import yaml
 
     default_config_path = "config/default.yaml"
-    default_config_path = pkg_resources.resource_filename(
-        __name__, default_config_path)
+    default_config_path = pkg_resources.resource_filename(__name__, default_config_path)
     _LOGGER.debug(
         "Reading default configuration file distributed"
-        " with package from '{}'.".format(
-            default_config_path
-        )
+        " with package from '{}'.".format(default_config_path)
     )
     try:
         _CONFIG = yaml.safe_load(open(default_config_path, "r"))
         _LOGGER.debug("Default config: {}".format(_CONFIG))
     except IOError:
-        _LOGGER.error(
-            "Couldn't read configuration file from '{}'."
-            .format(default_config_path)
-        )
+        _LOGGER.error("Couldn't read configuration file from '{}'.".format(default_config_path))
         _CONFIG = dict()
 
-    user_config_path = os.path.join(
-        os.path.expanduser("~"), ".scifi.config.yaml")
+    user_config_path = os.path.join(os.path.expanduser("~"), ".scifi.config.yaml")
     if os.path.exists(user_config_path):
         # Read up
         _LOGGER.debug("Found custom user config: {}".format(user_config_path))
@@ -131,16 +124,14 @@ def setup_config(custom_yaml_config=None):
             _LOGGER.debug("Custom user config: {}".format(custom_config))
             # Update config
             _LOGGER.debug(
-                "Updating configuration with custom file from '{}'."
-                .format(user_config_path)
+                "Updating configuration with custom file from '{}'.".format(user_config_path)
             )
             _CONFIG.update(custom_config)
             _LOGGER.debug("Current config: {}".format(custom_config))
         except IOError:
             _LOGGER.error(
                 "Configuration file from '{}' exists but is not readable."
-                " Ignoring."
-                .format(user_config_path)
+                " Ignoring.".format(user_config_path)
             )
     else:
         _LOGGER.debug(
@@ -155,16 +146,15 @@ def setup_config(custom_yaml_config=None):
             _LOGGER.debug("Custom passed config: {}".format(custom_config))
             # Update config
             _LOGGER.debug(
-                "Updating configuration with custom file from '{}'.".format(
-                    custom_yaml_config
-                )
+                "Updating configuration with custom file from '{}'.".format(custom_yaml_config)
             )
             _CONFIG.update(custom_config)
             _LOGGER.debug("Current config: {}".format(custom_config))
         except IOError as e:
             _LOGGER.error(
-                "Passed configuration from '{}' exists but is not readable."
-                .format(custom_yaml_config)
+                "Passed configuration from '{}' exists but is not readable.".format(
+                    custom_yaml_config
+                )
             )
             raise e
 
@@ -172,3 +162,13 @@ def setup_config(custom_yaml_config=None):
 
 
 _LOGGER = setup_logger()
+
+if __name__ == "scifi":
+    import sys
+    from scifi.pipeline import main
+
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        _LOGGER.error("Interrupted by user!")
+        sys.exit(1)

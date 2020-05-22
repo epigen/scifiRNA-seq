@@ -1,28 +1,28 @@
 
-star_exe:
+star_exe:  # STAR aligner runnable
   "/home/arendeiro/workspace/STAR-2.7.0e/bin/Linux_x86_64_static/STAR"
-star_genome_dir:
+star_genome_dir:  # directory with STAR aligner indexes
   "/home/arendeiro/resources/genomes/hg38/indexed_STAR-2.7.0e/"
-gtf_file:
+gtf_file:  # Transcriptomg GTF file
   "/home/arendeiro/resources/genomes/hg38/10X/refdata-cellranger-GRCh38-1.2.0/genes/genes.gtf"
-annotation:
-  "/scratch/lab_bock/shared/projects/sci-rna/metadata/sciRNA-seq.PD190_humanmouse.oligos_2019-09-05.csv"
-root_output_dir:
+# star_genome_dir:
+#   "/home/arendeiro/resources/genomes/hg38_mm10_transgenes_Tcrlibrary/indexed_STAR_2.7.0e/"
+# gtf_file:
+#   "/home/arendeiro/resources/genomes/hg38_mm10_transgenes_Tcrlibrary/Homo_sapiens-Mus_musculus.Ensembl92.dna.primary_assembly.Tcr_lambda_spiked.gtf"
+root_output_dir:  # default directory for outputs
   /scratch/lab_bock/shared/projects/sci-rna/data/$(RUN_NAME)
-expected_cell_number:
+expected_cell_number:  # default expected number of cells
   200000
-min_umi_output:
+min_umi_output:  # minimum number of UMIs a barcode must have to be reported
   3
-variables:
+annotation:  # round2 CSV annotation. Superceeded by values in sample CSV annotation.
+  "/scratch/lab_bock/shared/projects/sci-rna/metadata/sciRNA-seq.PD190_humanmouse.oligos_2019-09-05.csv"
+variables:  # variables in round1 CSV annotation to bring along, Superceeded by values in sample CSV annotation
   - "plate_well"
-array_size:
-  24
-species_mixing:
+species_mixing:  # whether experiment contains more than one species. Superceeded by value in sample CSV annotatiton
   1
-star_dir:
-  "/home/arendeiro/resources/genomes/hg38_mm10_transgenes_Tcrlibrary/indexed_STAR_2.7.0e/"
-gtf_file:
-  "/home/arendeiro/resources/genomes/hg38_mm10_transgenes_Tcrlibrary/Homo_sapiens-Mus_musculus.Ensembl92.dna.primary_assembly.Tcr_lambda_spiked.gtf"
+array_size:  # SLURM job array size
+  24
 chunks:
   1000
 chunk_batch_size:

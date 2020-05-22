@@ -13,23 +13,24 @@ from textwrap import dedent
 
 from scifi import _LOGGER
 from scifi.job_control import (
-    job_shebang, print_parameters_during_job,
+    job_shebang,
+    print_parameters_during_job,
     slurm_echo_array_task_id,
-    job_end, write_job_to_file, submit_job)
+    job_end,
+    write_job_to_file,
+    submit_job,
+)
 
 
 def map_command(
-        args: argparse.Namespace,
-        sample_name: str,
-        sample_out_dir: str,
-        r1_annotation: pd.DataFrame,
-        config: dict):
+    args: argparse.Namespace,
+    sample_name: str,
+    sample_out_dir: str,
+    r1_annotation: pd.DataFrame,
+    config: dict,
+):
     _LOGGER.debug(f"Running map command for sample '{sample_name}'")
-    map_params = dict(
-        cpus=4,
-        mem=60000,
-        queue="shortq",
-        time="08:00:00")
+    map_params = dict(cpus=4, mem=60000, queue="shortq", time="08:00:00")
 
     prefixes = list()
     bams = list()
@@ -39,7 +40,7 @@ def map_command(
     _LOGGER.debug(f"Attributes to use in input BAM files glob: '{attrs}'")
     for r1_name, r1 in r1_annotation.iterrows():
         _LOGGER.debug(f"Getting input BAM files for '{r1_name}'")
-        r1['sample_name'] = r1.name
+        r1["sample_name"] = r1.name
         out_dir = os.path.join(args.root_output_dir, sample_name, r1_name)
         out_prefix = os.path.join(out_dir, r1_name) + ".ALL"
         _LOGGER.debug(f"Prefix for sample '{r1_name}': '{out_prefix}'")
@@ -64,32 +65,28 @@ def map_command(
             job_name = f"scifi_pipeline.{sample_name}.map.{r1_name}"
             job = os.path.join(sample_out_dir, job_name + ".sh")
             log = os.path.join(sample_out_dir, job_name + ".log")
-            params = dict(
-                map_params,
-                job_file=job,
-                log_file=log)
+            params = dict(map_params, job_file=job, log_file=log)
 
             cmd = job_shebang()
             cmd += print_parameters_during_job(params)
             cmd += star_cmd(
-                prefix=out_prefix, input_bams=bam_files,
-                star_genome_dir=config['star_genome_dir'],
-                cpus=4, star_exe=config['star_exe'])
-            cmd += feature_counts_cmd(
-                gtf_file=args.gtf_file, prefix=out_prefix,
-                cpus=4, exon=False)
+                prefix=out_prefix,
+                input_bams=bam_files,
+                star_genome_dir=config["star_genome_dir"],
+                cpus=4,
+                star_exe=config["star_exe"],
+            )
+            cmd += feature_counts_cmd(gtf_file=args.gtf_file, prefix=out_prefix, cpus=4, exon=False)
             cmd += link_mapped_file_for_exonic_quantification(prefix=out_prefix)
-            cmd += feature_counts_cmd(
-                prefix=out_prefix, gtf_file=args.gtf_file,
-                cpus=4, exon=True)
+            cmd += feature_counts_cmd(prefix=out_prefix, gtf_file=args.gtf_file, cpus=4, exon=True)
             cmd += job_end()
             write_job_to_file(cmd, job)
             submit_job(job, params)
     else:
         # Write prefix and BAM files to array file
         array_file = os.path.join(
-            args.root_output_dir, sample_name,
-            f"scifi_pipeline.{sample_name}.map.array_file.txt")
+            args.root_output_dir, sample_name, f"scifi_pipeline.{sample_name}.map.array_file.txt"
+        )
         write_array_params(zip(prefixes, bam_files), array_file)
 
         # Now submit job array in chunks of size ``array.size``
@@ -98,27 +95,22 @@ def map_command(
             job_name = f"scifi_pipeline.{sample_name}.map.{array}"
             job = os.path.join(sample_out_dir, job_name + ".sh")
             log = os.path.join(sample_out_dir, job_name + ".%a.log")
-            params = dict(
-                map_params,
-                job_file=job,
-                log_file=log,
-                array=array)
+            params = dict(map_params, job_file=job, log_file=log, array=array)
 
             cmd = job_shebang()
             cmd += slurm_echo_array_task_id()
             cmd += get_array_params_from_array_list(array_file)
             cmd += print_parameters_during_job(params)
             cmd += star_cmd(
-                prefix=None, input_bams=None,
-                star_genome_dir=config['star_genome_dir'],
-                cpus=4, star_exe=config['star_exe'])
-            cmd += feature_counts_cmd(
-                prefix=out_prefix, gtf_file=args.gtf_file,
-                cpus=4, exon=False)
+                prefix=None,
+                input_bams=None,
+                star_genome_dir=config["star_genome_dir"],
+                cpus=4,
+                star_exe=config["star_exe"],
+            )
+            cmd += feature_counts_cmd(prefix=out_prefix, gtf_file=args.gtf_file, cpus=4, exon=False)
             cmd += link_mapped_file_for_exonic_quantification(prefix=out_prefix)
-            cmd += feature_counts_cmd(
-                gtf_file=args.gtf_file, prefix=None,
-                cpus=4, exon=True)
+            cmd += feature_counts_cmd(gtf_file=args.gtf_file, prefix=None, cpus=4, exon=True)
             cmd += job_end()
             write_job_to_file(cmd, job)
             submit_job(job, params)
@@ -138,14 +130,12 @@ def get_array_params_from_array_list(array_file):
         "readarray -t ARR < $ARRAY_FILE" + "\n"
         'IFS=" " read -r -a F <<< ${ARR[$SLURM_ARRAY_TASK_ID]}' + "\n"
         "PREFIX=${F[0]}" + "\n"
-        "INPUT_BAM=${F[1]}" + "\n")
+        "INPUT_BAM=${F[1]}" + "\n"
+    )
     return txt
 
 
-def star_cmd(
-        prefix=None,
-        input_bams=None, star_genome_dir=None,
-        cpus=4, star_exe=None):
+def star_cmd(prefix=None, input_bams=None, star_genome_dir=None, cpus=4, star_exe=None):
     """
     """
     # align with STAR >=2.7.0e
