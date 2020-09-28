@@ -1,5 +1,5 @@
 > :warning: **This repository is experimental**: Testing is very limited and we
-provide no promise of continually developing or maintaint it!
+provide no promise of continually developing or maintain it!
 
 # scifiRNA-seq pipeline
 
