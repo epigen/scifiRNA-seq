@@ -7,9 +7,10 @@ The main command and supporting functions for the mapping step of scifi pipeline
 
 import os
 import argparse
-import pandas as pd
 from glob import glob
 from textwrap import dedent
+
+import pandas as pd
 
 from scifi import _LOGGER
 from scifi.job_control import (
@@ -76,9 +77,9 @@ def map_command(
                 cpus=4,
                 star_exe=config["star_exe"],
             )
-            cmd += feature_counts_cmd(gtf_file=args.gtf_file, prefix=out_prefix, cpus=4, exon=False)
+            cmd += feature_counts_cmd(gtf_file=config['gtf_file'], prefix=out_prefix, cpus=4, exon=False)
             cmd += link_mapped_file_for_exonic_quantification(prefix=out_prefix)
-            cmd += feature_counts_cmd(prefix=out_prefix, gtf_file=args.gtf_file, cpus=4, exon=True)
+            cmd += feature_counts_cmd(prefix=out_prefix, gtf_file=config['gtf_file'], cpus=4, exon=True)
             cmd += job_end()
             write_job_to_file(cmd, job)
             submit_job(job, params)
@@ -108,9 +109,9 @@ def map_command(
                 cpus=4,
                 star_exe=config["star_exe"],
             )
-            cmd += feature_counts_cmd(prefix=out_prefix, gtf_file=args.gtf_file, cpus=4, exon=False)
+            cmd += feature_counts_cmd(prefix=out_prefix, gtf_file=config['gtf_file'], cpus=4, exon=False)
             cmd += link_mapped_file_for_exonic_quantification(prefix=out_prefix)
-            cmd += feature_counts_cmd(gtf_file=args.gtf_file, prefix=None, cpus=4, exon=True)
+            cmd += feature_counts_cmd(gtf_file=config['gtf_file'], prefix=None, cpus=4, exon=True)
             cmd += job_end()
             write_job_to_file(cmd, job)
             submit_job(job, params)

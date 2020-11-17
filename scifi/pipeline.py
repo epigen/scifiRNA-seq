@@ -144,10 +144,7 @@ def main(cli=None):
         r1_annotation_file = sample["annotation"]
         r1_annotation = pd.read_csv(r1_annotation_file).set_index("sample_name")
         sample_out_dir = os.path.join(args.root_output_dir, sample_name)
-        try:
-            os.makedirs(sample_out_dir)
-        except FileExistsError:
-            pass
+        os.makedirs(sample_out_dir, exist_ok=True)
         sample_attributes = sample["variables"].split(",")
 
         if args.command in ["all", "map"]:
@@ -155,7 +152,7 @@ def main(cli=None):
             map_command(args, sample_name, sample_out_dir, r1_annotation, _CONFIG)
         if args.command in ["all", "tracks"]:
             _LOGGER.warning("The tracks step is not yet implemented. Skipping.")
-            break
+            pass
             # _LOGGER.debug(f"Running tracks command with sample {sample_name}")
             # tracks_command(args)
         if args.command in ["all", "filter"]:
@@ -185,6 +182,6 @@ def main(cli=None):
             )
         if args.command in ["all", "report"]:
             _LOGGER.warning("The report step is not yet implemented. Skipping.")
-            break
+            pass
             # _LOGGER.debug(f"Running report command with sample {sample_name}")
             # report_command(args)
