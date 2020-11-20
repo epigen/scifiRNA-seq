@@ -17,9 +17,8 @@ This pipeline has been developed only with a Linux system in mind and other
 are not supported, feel free to contribute a PR if facing problems in other
 systems.
 
-### Python
-
 - Python >=3.7
+- SLURM (not a hard requirement but best supported currently)
 
 The Python requirements can be seen in the [requirements.txt](requirements.txt)
 file and will be installed automatically by ``pip``.
@@ -62,8 +61,10 @@ variable.
 scifi pipeline ships with a
 [default configuration file](scifi/config/default.yaml).
 
-To configure the pipeline to a specific environment a file with the same
-structure  to `~/.scifi.config.yaml`.
+
+In the configuration file, location of software dependencies (STAR, featureCounts), but also location of static files (e.g. genome index, GTF file) can be specified.
+
+To configure the pipeline to a specific environment, write a file with the same structure to `~/.scifi.config.yaml` to avoid passing a specific configuration at runtime repeatedly (but possible with the -c option).
 
 A log file is written to `~/.scifi.log.txt` in addition to the command-line
 output.
@@ -96,8 +97,7 @@ Mandatory columns are:
  - `sample_name`: A name for the sample
  - `annotation`: CSV file with annotation for each round1 well.
  - `variables`:  Variables in CSV `annotation` file above to use. A
-comma-delimited string with various values (no spaces). Use software capable of
-appropriately quoting fields to produce CSV file.
+comma-delimited string with various values (no spaces). Use software capable of appropriately quoting fields to produce CSV file.
  - `species_mixing`: Whether the experiment is a Banyard experiment with cells
 from two organisms. Use `1` or `0` for this column.
  - `expected_cell_number`: The expected number of cells. This has no influence
@@ -109,9 +109,9 @@ Any other columns may be added but will not be used by the pipeline.
 Example:
 
 ```csv
-sample_name,toggle,protocol,batch,cell_line,cell_number,material,organism,flowcell,variables
-scifi-RNA-seq_PDXYZ_SAMPLE_X_200k-nuclei,0,scifiRNA-seq,SCI004,Jurkat,200000,nuclei,human,BSF_XXXXX,"plate_well,treatment,knockout"
-scifi-RNA-seq_PDXYZ_SAMPLE_X_1M-nuclei,1,scifiRNA-seq,SCI004,Jurkat,1000000,nuclei,human,BSF_XXXXX,"plate_well,treatment,knockout"
+sample_name,toggle,protocol,batch,cell_line,expected_cell_number,material,organism,species_mixing,flowcell,variables
+scifi-RNA-seq_PDXYZ_SAMPLE_X_200k-nuclei,0,scifiRNA-seq,SCI004,Jurkat,200000,nuclei,human,1,BSF_XXXXX,"plate_well,treatment,knockout"
+scifi-RNA-seq_PDXYZ_SAMPLE_X_1M-nuclei,1,scifiRNA-seq,SCI004,Jurkat,1000000,nuclei,human,1,BSF_XXXXX,"plate_well,treatment,knockout"
 ```
 
 #### Round1 plate well annotation
@@ -139,21 +139,22 @@ scifi-RNA-seq_PDXYZ_SAMPLE_X_1M-nuclei_A07,ATACCTCCCAGGA,A07,Gefitinib,knockoutB
 
 ### Runnning
 
-Use either the ``scifi`` executable or ``python -m scifi`` to run the pipeline.
+The ``scifi`` executable is placed in the path `pip` installs software to. In linux systems this will usually be `~/.local/bin`.
+In order to call the command without refering to that location, add `~/.local/bin` to you `$PATH` variable.
 
 To see the help for the pipeline:
 ```bash
-python -m scifi --help
+scifi --help
 ```
 
 The pipeline has several commands. To see the help for a specific command:
 ```bash
-python -m scifi map --help
+scifi map --help
 ```
 
 To run a command for all samples simply run:
 ```bash
-python -m scifi \
+scifi \
     map \
         --input-bam-glob /lab/seq/{flowcell}/{flowcell}#*_{sample_name}.bam \
         metadata/annotation.csv
@@ -161,6 +162,10 @@ python -m scifi \
 
 A new configuration file can be passed at runtime with the "-c" option or
 values specfied in `~/.scifi.config.yaml`.
+
+If not using SLURM, provide a value in the configuration unde `submission_command` that is the command to be called to execute the job e.g. `sh`.
+
+A dry run is possible with the option `-d/--dry-run`, which will produce job files to be executed - useful for debugging or running in a particular way of choice.
 
 
 ## Pipeline outputs

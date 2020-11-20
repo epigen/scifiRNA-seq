@@ -42,7 +42,12 @@ setup(
         "write_to": "scifi/_version.py",
         "write_to_template": '__version__ = "{version}"\n',
     },
-    entry_points={"console_scripts": ["scifi = scifi:pipeline.main"]},
+    entry_points={
+        "console_scripts": [
+            "scifi = scifi.pipeline:main",
+            "scifi-summarizer = scifi.scripts.summarizer:main",
+        ]
+    },
     description="A processing pipeline for scifiRNA-seq data.",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -50,10 +55,12 @@ setup(
         "Development Status :: 3 - Alpha",
         "Programming Language :: Python :: 3 :: Only",
         "Programming Language :: Python :: 3.7",
-        "License :: OSI Approved :: " "GNU General Public License v3 or later (GPLv3+)",
+        "License :: OSI Approved :: "
+        "GNU General Public License v3 or later (GPLv3+)",
         "Topic :: Scientific/Engineering :: Bio-Informatics",
     ],
-    keywords="bioinformatics, sequencing, ngs, ngs analysis, " "single cell, RNA-seq, scRNA-seq",
+    keywords="bioinformatics, sequencing, ngs, ngs analysis, "
+    "single cell, RNA-seq, scRNA-seq",
     url="https://github.com/epigen/scifiRNA-seq",
     project_urls={
         "Bug Tracker": "https://github.com/epigen/scifiRNA-seq/issues",
