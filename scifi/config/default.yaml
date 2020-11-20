@@ -5,6 +5,8 @@ star_genome_dir:  # directory with STAR aligner indexes
   "/home/arendeiro/resources/genomes/hg38/indexed_STAR-2.7.0e/"
 gtf_file:  # Transcriptomg GTF file
   "/home/arendeiro/resources/genomes/hg38/10X/refdata-cellranger-GRCh38-1.2.0/genes/genes.gtf"
+featurecounts_exe:
+  "subread-2.0.1-Linux-x86_64/bin/featureCounts"
 # star_genome_dir:
 #   "/home/arendeiro/resources/genomes/hg38_mm10_transgenes_Tcrlibrary/indexed_STAR_2.7.0e/"
 # gtf_file:
@@ -29,9 +31,10 @@ chunk_batch_size:
   25
 grna_pbs_sequence:
   GTGGAAAGGACGAAACACCG
+submission_command:
+  "sbatch"
 
-
-resoures:
+resources:
   map:
     cpus: 4
     mem: 60000

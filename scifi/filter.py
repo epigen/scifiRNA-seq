@@ -6,11 +6,12 @@ The main command and supporting functions for the filter step of scifi pipeline
 """
 
 import os
+from os.path import join as pjoin
 import sys
 import argparse
 
 import pandas as pd
-from scifi import _LOGGER
+from scifi import _LOGGER, _CONFIG
 from scifi.job_control import (
     job_shebang,
     print_parameters_during_job,
@@ -23,7 +24,6 @@ from scifi.job_control import (
 
 def filter_command(
     args: argparse.Namespace,
-    config: dict,
     sample_name: str,
     sample_out_dir: str,
     r1_annotation: pd.DataFrame,
@@ -36,9 +36,9 @@ def filter_command(
     dry_run: bool = False,
 ) -> int:
     _LOGGER.debug(f"Running filter command for sample '{sample_name}'")
-    filter_params = dict(cpus=1, mem=8000, queue="shortq", time="01:00:00")
+    filter_params = _CONFIG["resources"]["filter"]
     if correct_r2_barcodes and correct_r2_barcodes_file is None:
-        correct_r2_barcodes_file = os.path.join(
+        correct_r2_barcodes_file = pjoin(
             sample_out_dir, sample_name + ".fixed_barcodes.mapping.tsv"
         )
 
@@ -46,9 +46,11 @@ def filter_command(
     r1_dirs = list()
     for r1_name, r1 in r1_annotation.iterrows():
         r1["sample_name"] = r1.name
-        out_dir = os.path.join(args.root_output_dir, sample_name, r1_name)
-        out_prefix = os.path.join(out_dir, r1_name) + ".ALL"
-        output_suffix = "metrics" if not args.correct_r2_barcodes else "metrics_corrected"
+        out_dir = pjoin(args.root_output_dir, sample_name, r1_name)
+        out_prefix = pjoin(out_dir, r1_name) + ".ALL"
+        output_suffix = (
+            "metrics" if not args.correct_r2_barcodes else "metrics_corrected"
+        )
         out_file = f"{out_prefix}.{output_suffix}.csv.gz"
         _LOGGER.debug(f"Sample '{r1_name}': '{out_prefix}\n{out_file}'")
 
@@ -67,10 +69,9 @@ def filter_command(
     if not args.arrayed:
         for r1_name, sample_dir in zip(r1_names, r1_dirs):
             job_name = f"scifi_pipeline.{sample_name}.filter.{r1_name}"
-            job = os.path.join(sample_out_dir, job_name + ".sh")
-            log = os.path.join(sample_out_dir, job_name + ".log")
-            out_prefix = os.path.join(sample_dir, r1_name) + ".ALL"
-            params = dict(filter_params, job_name=job_name, job_file=job, log_file=log)
+            job = pjoin(sample_out_dir, job_name + ".sh")
+            log = pjoin(sample_out_dir, job_name + ".log")
+            out_prefix = pjoin(sample_dir, r1_name) + ".ALL"
             params = dict(
                 filter_params, job_name=job_name, job_file=job, log_file=log
             )
@@ -83,7 +84,7 @@ def filter_command(
                 prefix=out_prefix,
                 sample_name=r1_name,
                 exon=False,
-                min_umis=config["min_umi_output"],
+                min_umis=_CONFIG["min_umi_output"],
                 expected_cell_number=expected_cell_number,
                 cell_barcodes="r2",
                 species_mixture=species_mixture,
@@ -97,7 +98,7 @@ def filter_command(
                 prefix=out_prefix,
                 sample_name=r1_name,
                 exon=True,
-                min_umis=config["min_umi_output"],
+                min_umis=_CONFIG["min_umi_output"],
                 expected_cell_number=expected_cell_number,
                 cell_barcodes="r2",
                 species_mixture=species_mixture,
@@ -107,12 +108,13 @@ def filter_command(
             )
             cmd += job_end()
             write_job_to_file(cmd, job)
-            if not dry_run:
-                submit_job(job, params)
+            submit_job(job, params, dry=args.dry_run)
     else:
         # Write prefix and BAM files to array file
-        array_file = os.path.join(
-            args.root_output_dir, sample_name, f"scifi_pipeline.{sample_name}.filter.array_file.txt"
+        array_file = pjoin(
+            args.root_output_dir,
+            sample_name,
+            f"scifi_pipeline.{sample_name}.filter.array_file.txt",
         )
         write_array_params(zip(r1_names, r1_dirs), array_file)
 
@@ -120,9 +122,8 @@ def filter_command(
         for i in range(0, args.array_size, len(r1_names)):
             array = f"{i}-{i + args.array_size - 1}"
             job_name = f"scifi_pipeline.{sample_name}.filter.{array}"
-            job = os.path.join(sample_out_dir, job_name + ".sh")
-            log = os.path.join(sample_out_dir, job_name + ".%a.log")
-            params = dict(filter_params, job_name=job_name, job_file=job, log_file=log, array=array)
+            job = pjoin(sample_out_dir, job_name + ".sh")
+            log = pjoin(sample_out_dir, job_name + ".%a.log")
             params = dict(
                 filter_params,
                 job_name=job_name,
@@ -141,7 +142,7 @@ def filter_command(
                 prefix=None,
                 sample_name=None,
                 exon=False,
-                min_umis=config["min_umi_output"],
+                min_umis=_CONFIG["min_umi_output"],
                 expected_cell_number=expected_cell_number,
                 cell_barcodes="r2",
                 species_mixture=species_mixture,
@@ -155,7 +156,7 @@ def filter_command(
                 prefix=None,
                 sample_name=None,
                 exon=True,
-                min_umis=config["min_umi_output"],
+                min_umis=_CONFIG["min_umi_output"],
                 expected_cell_number=expected_cell_number,
                 cell_barcodes="r2",
                 species_mixture=species_mixture,
@@ -165,8 +166,7 @@ def filter_command(
             )
             cmd += job_end()
             write_job_to_file(cmd, job)
-            if not dry_run:
-                submit_job(job, params)
+            submit_job(job, params, dry=args.dry_run)
     return 0
 
 
@@ -209,7 +209,9 @@ def filter_cmd(
         additional_args += "--species-mixture "
     if correct_r2_barcodes:
         additional_args += "--correct-r2-barcodes "
-        additional_args += f"--correct-r2-barcode-file {correct_r2_barcodes_file} "
+        additional_args += (
+            f"--correct-r2-barcode-file {correct_r2_barcodes_file} "
+        )
     # align with STAR >=2.7.0e
     if prefix is None:
         prefix = "${SAMPLE_DIR}/${SAMPLE_NAME}"

@@ -6,7 +6,10 @@ The main command and supporting functions for the join step of scifi pipeline
 """
 
 import os
+from os.path import join as pjoin
+import argparse
 
+from scifi import _CONFIG
 from scifi.job_control import (
     job_shebang,
     print_parameters_during_job,
@@ -17,18 +20,18 @@ from scifi.job_control import (
 
 
 def join_command(
+    args: argparse.Namespace,
     sample_name: str,
     sample_out_dir: str,
     r1_attributes: list,
     species_mixture: bool,
     correct_r2_barcodes: bool,
 ) -> int:
-    join_params = dict(cpus=1, mem=8000, queue="shortq", time="00:30:00")
+    join_params = _CONFIG["resources"]["join"]
 
     job_name = f"scifi_pipeline.{sample_name}.join"
-    job = os.path.join(sample_out_dir, job_name + ".sh")
-    log = os.path.join(sample_out_dir, job_name + ".log")
-    params = dict(join_params, job_file=job, log_file=log)
+    job = pjoin(sample_out_dir, job_name + ".sh")
+    log = pjoin(sample_out_dir, job_name + ".log")
     params = dict(join_params, job_name=job_name, job_file=job, log_file=log)
 
     cmd = job_shebang()
@@ -65,7 +68,7 @@ def join_command(
     )
     cmd += job_end()
     write_job_to_file(cmd, job)
-    submit_job(job, params)
+    submit_job(job, params, dry=args.dry_run)
     return 0
 
 
@@ -97,7 +100,7 @@ def join_metrics(
 ) -> str:
     """
     """
-    prefix = os.path.join(directory, sample_name)
+    prefix = pjoin(directory, sample_name)
     filter_exon = "! -name '*exon*'" if not exon else ""
     exon_str = ".exon" if exon else ""
     suffix = "_corrected" if correct_r2_barcodes else ""
@@ -141,7 +144,7 @@ def join_expression(
 ) -> str:
     """
     """
-    prefix = os.path.join(directory, sample_name)
+    prefix = pjoin(directory, sample_name)
     filter_exon = "! -name '*exon*'" if not exon else ""
     exon_str = ".exon" if exon else ""
     suffix = "_corrected" if correct_r2_barcodes else ""
