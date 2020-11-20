@@ -71,6 +71,9 @@ def filter_command(
             log = os.path.join(sample_out_dir, job_name + ".log")
             out_prefix = os.path.join(sample_dir, r1_name) + ".ALL"
             params = dict(filter_params, job_name=job_name, job_file=job, log_file=log)
+            params = dict(
+                filter_params, job_name=job_name, job_file=job, log_file=log
+            )
 
             cmd = job_shebang()
             cmd += print_parameters_during_job(params)
@@ -120,6 +123,13 @@ def filter_command(
             job = os.path.join(sample_out_dir, job_name + ".sh")
             log = os.path.join(sample_out_dir, job_name + ".%a.log")
             params = dict(filter_params, job_name=job_name, job_file=job, log_file=log, array=array)
+            params = dict(
+                filter_params,
+                job_name=job_name,
+                job_file=job,
+                log_file=log,
+                array=array,
+            )
 
             cmd = job_shebang()
             cmd += slurm_echo_array_task_id()

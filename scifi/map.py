@@ -67,6 +67,9 @@ def map_command(
             job = os.path.join(sample_out_dir, job_name + ".sh")
             log = os.path.join(sample_out_dir, job_name + ".log")
             params = dict(map_params, job_file=job, log_file=log)
+            params = dict(
+                map_params, job_name=job_name, job_file=job, log_file=log
+            )
 
             cmd = job_shebang()
             cmd += print_parameters_during_job(params)
@@ -97,6 +100,13 @@ def map_command(
             job = os.path.join(sample_out_dir, job_name + ".sh")
             log = os.path.join(sample_out_dir, job_name + ".%a.log")
             params = dict(map_params, job_file=job, log_file=log, array=array)
+            params = dict(
+                map_params,
+                job_name=job_name,
+                job_file=job,
+                log_file=log,
+                array=array,
+            )
 
             cmd = job_shebang()
             cmd += slurm_echo_array_task_id()
