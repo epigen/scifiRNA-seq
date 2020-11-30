@@ -53,8 +53,8 @@ def submit_job(job_file, params, array=None, cmd=None, dry=False) -> None:
             array="" if array is not None else "", **params
         )
         subprocess.Popen(cmd.split(" "))
-    elif cmd == "sh":
-        subprocess.Popen(["sh", job_file])
+    else:
+        subprocess.Popen(cmd.split(" ") + [job_file])
 
 
 # def capture_slurm_job():
