@@ -68,7 +68,7 @@ def report_command(
     )
     cmd += job_end()
     write_job_to_file(cmd, job)
-    submit_job(job, params, cmd=args.cmd, dry=args.dry_run)
+    submit_job(job, params, cmd=_CONFIG["submission_command"], dry=args.dry_run)
 
 
 def write_array_params(params, array_file):
