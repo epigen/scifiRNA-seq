@@ -108,7 +108,7 @@ def filter_command(
             )
             cmd += job_end()
             write_job_to_file(cmd, job)
-            submit_job(job, params, dry=args.dry_run)
+            submit_job(job, params, cmd=args.cmd, dry=args.dry_run)
     else:
         # Write prefix and BAM files to array file
         array_file = pjoin(
@@ -166,7 +166,7 @@ def filter_command(
             )
             cmd += job_end()
             write_job_to_file(cmd, job)
-            submit_job(job, params, dry=args.dry_run)
+            submit_job(job, params, array=array, cmd=args.cmd, dry=args.dry_run)
     return 0
 
 

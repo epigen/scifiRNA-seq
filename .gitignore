@@ -1,3 +1,7 @@
+STAR-*/
+subread-*/
+pipeline_output/
+
 # ignore test results
 tests/test/*
 
