@@ -11,7 +11,7 @@ import sys
 import argparse
 
 import pandas as pd
-from scifi import _LOGGER, _CONFIG
+from scifi import _LOGGER
 from scifi.job_control import (
     job_shebang,
     print_parameters_during_job,
@@ -36,7 +36,7 @@ def filter_command(
     dry_run: bool = False,
 ) -> int:
     _LOGGER.debug(f"Running filter command for sample '{sample_name}'")
-    filter_params = _CONFIG["resources"]["filter"]
+    filter_params = args.config["resources"]["filter"]
     if correct_r2_barcodes and correct_r2_barcodes_file is None:
         correct_r2_barcodes_file = pjoin(
             sample_out_dir, sample_name + ".fixed_barcodes.mapping.tsv"
@@ -84,7 +84,7 @@ def filter_command(
                 prefix=out_prefix,
                 sample_name=r1_name,
                 exon=False,
-                min_umis=_CONFIG["min_umi_output"],
+                min_umis=args.config["min_umi_output"],
                 expected_cell_number=expected_cell_number,
                 cell_barcodes="r2",
                 species_mixture=species_mixture,
@@ -98,7 +98,7 @@ def filter_command(
                 prefix=out_prefix,
                 sample_name=r1_name,
                 exon=True,
-                min_umis=_CONFIG["min_umi_output"],
+                min_umis=args.config["min_umi_output"],
                 expected_cell_number=expected_cell_number,
                 cell_barcodes="r2",
                 species_mixture=species_mixture,
@@ -109,7 +109,10 @@ def filter_command(
             cmd += job_end()
             write_job_to_file(cmd, job)
             submit_job(
-                job, params, cmd=_CONFIG["submission_command"], dry=args.dry_run
+                job,
+                params,
+                cmd=args.config["submission_command"],
+                dry=args.dry_run,
             )
     else:
         # Write prefix and BAM files to array file
@@ -144,7 +147,7 @@ def filter_command(
                 prefix=None,
                 sample_name=None,
                 exon=False,
-                min_umis=_CONFIG["min_umi_output"],
+                min_umis=args.config["min_umi_output"],
                 expected_cell_number=expected_cell_number,
                 cell_barcodes="r2",
                 species_mixture=species_mixture,
@@ -158,7 +161,7 @@ def filter_command(
                 prefix=None,
                 sample_name=None,
                 exon=True,
-                min_umis=_CONFIG["min_umi_output"],
+                min_umis=args.config["min_umi_output"],
                 expected_cell_number=expected_cell_number,
                 cell_barcodes="r2",
                 species_mixture=species_mixture,
@@ -172,7 +175,7 @@ def filter_command(
                 job,
                 params,
                 array=array,
-                cmd=_CONFIG["submission_command"],
+                cmd=args.config["submission_command"],
                 dry=args.dry_run,
             )
     return 0

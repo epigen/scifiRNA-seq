@@ -13,7 +13,7 @@ from textwrap import dedent
 
 import pandas as pd
 
-from scifi import _LOGGER, _CONFIG
+from scifi import _LOGGER
 from scifi.job_control import (
     job_shebang,
     print_parameters_during_job,
@@ -32,7 +32,7 @@ def map_command(
 ):
     _LOGGER.debug(f"Running map command for sample '{sample_name}'")
     # map_params = dict(cpus=4, mem=60000, queue="shortq", time="08:00:00")
-    map_params = _CONFIG["resources"]["map"]
+    map_params = args.config["resources"]["map"]
 
     prefixes = list()
     bams = list()
@@ -78,24 +78,35 @@ def map_command(
 
             cmd = job_shebang()
             cmd += print_parameters_during_job(params)
-            cmd += star_cmd(prefix=out_prefix, input_bams=bam_files, cpus=4)
-            cmd += feature_counts_cmd(
-                gtf_file=_CONFIG["gtf_file"],
+            cmd += star_cmd(
+                star_genome_dir=args.config["star_genome_dir"],
                 prefix=out_prefix,
+                input_bams=bam_files,
+                cpus=4,
+                star_exe=args.config["star_exe"],
+            )
+            cmd += feature_counts_cmd(
+                gtf_file=args.config["gtf_file"],
+                prefix=out_prefix,
+                featurecounts_exe=args.config["featurecounts_exe"],
                 cpus=4,
                 exon=False,
             )
             cmd += link_mapped_file_for_exonic_quantification(prefix=out_prefix)
             cmd += feature_counts_cmd(
+                gtf_file=args.config["gtf_file"],
                 prefix=out_prefix,
-                gtf_file=_CONFIG["gtf_file"],
+                featurecounts_exe=args.config["featurecounts_exe"],
                 cpus=4,
                 exon=True,
             )
             cmd += job_end()
             write_job_to_file(cmd, job)
             submit_job(
-                job, params, cmd=_CONFIG["submission_command"], dry=args.dry_run
+                job,
+                params,
+                cmd=args.config["submission_command"],
+                dry=args.dry_run,
             )
     else:
         # Write prefix and BAM files to array file
@@ -124,16 +135,27 @@ def map_command(
             cmd += slurm_echo_array_task_id()
             cmd += get_array_params_from_array_list(array_file)
             cmd += print_parameters_during_job(params)
-            cmd += star_cmd(prefix=None, input_bams=None, cpus=4,)
+            cmd += star_cmd(
+                star_genome_dir=args.config["star_genome_dir"],
+                prefix=None,
+                input_bams=None,
+                cpus=4,
+                star_exe=args.config["star_exe"],
+            )
             cmd += feature_counts_cmd(
                 prefix=out_prefix,
-                gtf_file=_CONFIG["gtf_file"],
+                gtf_file=args.config["gtf_file"],
+                featurecounts_exe=args.config["featurecounts_exe"],
                 cpus=4,
                 exon=False,
             )
             cmd += link_mapped_file_for_exonic_quantification(prefix=out_prefix)
             cmd += feature_counts_cmd(
-                gtf_file=_CONFIG["gtf_file"], prefix=None, cpus=4, exon=True
+                gtf_file=args.config["gtf_file"],
+                featurecounts_exe=args.config["featurecounts_exe"],
+                prefix=None,
+                cpus=4,
+                exon=True,
             )
             cmd += job_end()
             write_job_to_file(cmd, job)
@@ -141,7 +163,7 @@ def map_command(
                 job,
                 params,
                 array=array,
-                cmd=_CONFIG["submission_command"],
+                cmd=args.config["submission_command"],
                 dry=args.dry_run,
             )
     return 0
@@ -165,7 +187,9 @@ def get_array_params_from_array_list(array_file):
     return txt
 
 
-def star_cmd(prefix=None, input_bams: str = None, star_genome_dir=None, cpus=4):
+def star_cmd(
+    star_genome_dir, star_exe=None, prefix=None, input_bams: str = None, cpus=4,
+):
     """
     """
     # align with STAR >=2.7.0e
@@ -173,10 +197,12 @@ def star_cmd(prefix=None, input_bams: str = None, star_genome_dir=None, cpus=4):
         prefix = "${PREFIX}"
     if input_bams is None:
         input_bams = "${INPUT_BAM}"
+    if star_exe is None:
+        star_exe = "STAR"
     txt = f"""
-    {_CONFIG['star_exe']} \\
+    {star_exe} \\
     --runThreadN {cpus} \\
-    --genomeDir {_CONFIG["star_genome_dir"]} \\
+    --genomeDir {star_genome_dir} \\
     --clip3pAdapterSeq AAAAAA \\
     --outSAMprimaryFlag AllBestScore \\
     --outSAMattributes All \\
@@ -198,14 +224,19 @@ def link_mapped_file_for_exonic_quantification(prefix=None):
     {prefix}.STAR.Aligned.out.exon.bam\n"
 
 
-def feature_counts_cmd(gtf_file, prefix=None, cpus=4, exon=False):
+def feature_counts_cmd(
+    gtf_file, prefix=None, cpus=4, exon=False, featurecounts_exe=None
+):
     if prefix is None:
         prefix = "${PREFIX}"
+    if featurecounts_exe is None:
+        featurecounts_exe = "featureCounts"
+
     # count all reads overlapping a gene
     quant = "exon" if exon else "gene"
     exon = "exon." if exon else ""
     txt = f"""
-    {_CONFIG['featurecounts_exe']} \\
+    {featurecounts_exe} \\
     -T {cpus} \\
     -F GTF \\
     -t {quant} \\

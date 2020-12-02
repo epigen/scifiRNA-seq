@@ -79,6 +79,7 @@ def build_cli() -> argparse.ArgumentParser:
             dest="root_output_dir",
             help=_help,
             default=_def,
+            type=os.path.abspath,
         )
         _help = (
             "CSV file with sample annotation. One row per sample."
@@ -110,7 +111,11 @@ def build_cli() -> argparse.ArgumentParser:
         " Example: /lab/seq/{flowcell}/{flowcell}#*_{sample_name}.bam"
     )
     map_cmd.add_argument(
-        "--input-bam-glob", dest="input_bam_glob", help=_help, required=True
+        "--input-bam-glob",
+        dest="input_bam_glob",
+        help=_help,
+        required=True,
+        type=os.path.abspath,
     )
 
     # Filter-specific
@@ -141,9 +146,8 @@ def main(cli=None):
         args.sample_subset.split(",") if args.sample_subset != "" else []
     )
     _LOGGER.debug(args)
-    _CONFIG = setup_config(args.config_file)
-    # _CONFIG["dry_run"] = args.dry_run
-    _LOGGER.debug(_CONFIG)
+    args.config = setup_config(args.config_file)
+    _LOGGER.debug(args.config)
 
     # Read and prepare sample annotation sheet
     df = pd.read_csv(args.sample_annotation)

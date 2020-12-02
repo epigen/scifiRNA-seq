@@ -8,8 +8,6 @@ Utilities for job submission and management by the scifi pipeline.
 
 import subprocess
 
-from scifi import _CONFIG
-
 
 def job_shebang() -> str:
     return "#!/bin/env bash\n\ndate\n"
@@ -40,7 +38,7 @@ def submit_job(job_file, params, array=None, cmd=None, dry=False) -> None:
     if dry:
         return
     if cmd is None:
-        cmd = _CONFIG["submission_command"]
+        cmd = "sh -e"
 
     if cmd == "sbatch":
         if array is not None:

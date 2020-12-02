@@ -9,7 +9,6 @@ import os
 from os.path import join as pjoin
 import argparse
 
-from scifi import _CONFIG
 from scifi.job_control import (
     job_shebang,
     print_parameters_during_job,
@@ -27,7 +26,7 @@ def join_command(
     species_mixture: bool,
     correct_r2_barcodes: bool,
 ) -> int:
-    join_params = _CONFIG["resources"]["join"]
+    join_params = args.config["resources"]["join"]
 
     job_name = f"scifi_pipeline.{sample_name}.join"
     job = pjoin(sample_out_dir, job_name + ".sh")
@@ -68,7 +67,9 @@ def join_command(
     )
     cmd += job_end()
     write_job_to_file(cmd, job)
-    submit_job(job, params, cmd=_CONFIG["submission_command"], dry=args.dry_run)
+    submit_job(
+        job, params, cmd=args.config["submission_command"], dry=args.dry_run
+    )
     return 0
 
 
