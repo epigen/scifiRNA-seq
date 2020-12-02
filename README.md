@@ -84,9 +84,9 @@ Each read should have a the following tags:
  - `BC`: a concatenation of the sample barcode and the round1 barcode (22 bp);
  - `RX`: the UMI barcode (8bp)
 
-We use a [custom fork of Picard tools](https://github.com/DanieleBarreca/picard)
-for demultiplexing. The commands used for demultiplexing will be made available
-in the repository of the publication.
+We use a [custom fork of Picard tools](https://github.com/DanieleBarreca/picard) for demultiplexing.
+
+:boom: We've made a [guide for demultiplexing files here](demultiplexing_guide.pdf) - also [available in plain text here](demultiplexing_guide.rst).
 
 #### Sample annotation
 
