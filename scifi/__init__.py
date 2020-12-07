@@ -7,6 +7,7 @@ Initializing functions for the scifi pipeline.
 
 import os
 from typing import Dict, Any
+from pathlib import Path
 import logging
 import pkg_resources
 
@@ -51,7 +52,19 @@ def setup_logger(level="INFO", logfile=None) -> logging.Logger:
     _LOGGER.setLevel(logging.DEBUG)
     # create file handler which logs even debug messages
     if logfile is None:
-        logfile = os.path.join(os.path.expanduser("~"), ".scifi.log.txt")
+        logfile = Path("~/.scifi.log.txt").expanduser().absolute()
+
+    try:
+        logfile.touch()
+    except (PermissionError, OSError):
+        logfile = Path("./scifi.log.txt").absolute()
+        try:
+            logfile.touch()
+        except (PermissionError, OSError):
+            raise Exception(
+                "Can't write logfile in eiher home directory or current directory."
+            )
+
     fh = logging.FileHandler(logfile)
     fh.setLevel(logging.DEBUG)
     # create console handler with a higher log level
@@ -176,7 +189,6 @@ def setup_config(custom_yaml_config=None) -> Dict[str, Any]:
 
 
 _LOGGER = setup_logger()
-_CONFIG = setup_config()
 
 
 if __name__ == "__main__":
